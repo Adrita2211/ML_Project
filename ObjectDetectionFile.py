@@ -2,12 +2,13 @@ import streamlit as st
 
 import numpy as np
 import joblib
+from ultralytics import YOLO
 from PIL import Image
 
 # Load a pre-trained YOLOv5 model
 @st.cache_resource
 def load_model():
-     return joblib.load("img_detect_model.pkl")
+     return YOLO('best.pt')
 
 model = load_model()
 
