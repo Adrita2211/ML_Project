@@ -1,0 +1,4 @@
+joblib
+pillow
+numpy
+streamlit
