@@ -28,8 +28,8 @@ if uploaded_file:
     results = model(image_np)
 
     # Convert results to a format that can be displayed
-    #result_img = np.squeeze(results.render())
-    result_img = results[0].plot()
+    result_img = np.squeeze(results.render())
+    #result_img = results[0].plot()
     # Display the detected image
     st.image(result_img, caption="Detected Objects", use_column_width=True)
 
