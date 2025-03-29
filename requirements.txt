@@ -4,5 +4,3 @@ pillow
 numpy
 torch
 streamlit
-opencv-python-headless
-torchvision
