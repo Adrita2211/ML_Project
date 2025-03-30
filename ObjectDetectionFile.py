@@ -46,6 +46,7 @@ if uploaded_file:
         with st.expander("Detection Results"):
              for box in boxes:
                  st.write(box.data)
-     except Exception as ex:
+     
+    except Exception as ex:
                     # st.write(ex)
-             st.write("No image is uploaded yet!")
+          st.write("No image is uploaded yet!")
