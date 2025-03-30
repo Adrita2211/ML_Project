@@ -34,7 +34,7 @@ if uploaded_file:
     #st.image(result_img, caption="Detected Objects", use_column_width=True)
     annotated_image = results[0].plot()
     st.image(annotated_image, caption="Processed Image with Detections")
-    st.write(results)
+    #st.write(results)
     # Show detected objects with confidence scores
     #st.write("### 📌 Detected Objects:")
     #st.dataframe(results.pandas().xyxy[0][['name', 'confidence']])  # O
