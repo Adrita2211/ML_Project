@@ -4,7 +4,7 @@ import numpy as np
 import joblib
 from ultralytics import YOLO
 from PIL import Image
-
+import matplotlib.pyplot as plt
 # Load a pre-trained YOLOv5 model
 @st.cache_resource
 def load_model():
