@@ -2,7 +2,7 @@ ultralytics==8.3.98
 joblib
 pillow==11.1.0
 numpy==2.0.2
-torch==2.6.0+cu124
+torch==2.6.0
 streamlit
 opencv-python-headless==4.11.0.86
 matplotlib
