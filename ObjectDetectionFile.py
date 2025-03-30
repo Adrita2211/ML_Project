@@ -32,6 +32,8 @@ if uploaded_file:
     #result_img = results[0].plot()
     # Display the detected image
     #st.image(result_img, caption="Detected Objects", use_column_width=True)
+    annotated_image = results[0].plot()
+    st.image(annotated_image, caption="Processed Image with Detections")
     st.write(results)
     # Show detected objects with confidence scores
     #st.write("### 📌 Detected Objects:")
