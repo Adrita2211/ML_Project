@@ -6,4 +6,3 @@ torch
 streamlit
 opencv-python-headless
 matplotlib
-pyplot
