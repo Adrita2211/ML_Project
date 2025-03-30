@@ -1,8 +1,8 @@
-ultralytics==8.3.98
+ultralytics
 joblib
-pillow==11.1.0
-numpy==2.0.2
-torch==2.6.0
+pillow
+numpy
+torch
 streamlit
-opencv-python-headless==4.11.0.86
+opencv-python-headless
 matplotlib
