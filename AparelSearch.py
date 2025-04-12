@@ -10,8 +10,8 @@ import os
 from keras.applications.vgg16 import VGG16, preprocess_input
 from keras.preprocessing import image
 from keras.models import Model
-from google.colab.patches import cv2_imshow
-from google.colab import drive
+#from google.colab.patches import cv2_imshow
+#rom google.colab import drive
 import os
 from PIL import Image
 
@@ -75,17 +75,17 @@ if uploaded_file:
         object_embeddings.append(object_embedding)
     else:
         st.write("Sorry no relevant products found.")
-    for query_embedding in object_embeddings:
-        query_embedding = query_embedding.reshape(1, -1)
-        similar_image_indices = search_similar_images(index, query_embedding, top_k=2) # Example: top_k=5 for 5 most similar
-        for idx in similar_image_indices.flatten():
+     for query_embedding in object_embeddings:
+       query_embedding = query_embedding.reshape(1, -1)
+       similar_image_indices = search_similar_images(index, query_embedding, top_k=2) # Example: top_k=5 for 5 most similar
+       for idx in similar_image_indices.flatten():
            print(image_paths[idx]) # Prints paths of similar images
            similar_image=cv2.imread(image_paths[idx])
            st.image(annotated_image)
            #cv2_imshow(similar_image)
            #annotated_image = results[0].plot()
            # st.image(annotated_image, caption="Processed Image with Detections")
-            #st.write(results)
-            # Show detected objects with confidence scores
-            #st.write("### 📌 Detected Objects:")
-            #st.dataframe(results.pandas().xyxy[0][['name', 'confidence']])  # O
+           #st.write(results)
+           # Show detected objects with confidence scores
+           #st.write("### 📌 Detected Objects:")
+           #st.dataframe(results.pandas().xyxy[0][['name', 'confidence']])  # O
