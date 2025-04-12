@@ -33,14 +33,7 @@ def getIndex():
 def search_similar_images(index, query_embedding, top_k=1):
     D, I = index.search(query_embedding, top_k)
     return I
-    
-# Call search_similar_images for each query embedding in the array
-for query_embedding in embeddings:
-    # Reshape the query embedding if necessary (e.g., for FAISS, it expects 2D array)
-    query_embedding = query_embedding.reshape(1, -1)
-    I = search_similar_images(index, query_embedding, top_k=1)
-    similar_images_indices.append(I)  # Append I to the list
-
+     
 yolomodel = load_model()
 classificationmodel = load_classification_model()
 
