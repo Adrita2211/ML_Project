@@ -6,3 +6,6 @@ torch
 streamlit
 opencv-python-headless
 matplotlib
+faiss-cpu
+keras
+tensorflow
