@@ -75,7 +75,7 @@ if uploaded_file:
         object_embeddings.append(object_embedding)
     else:
         st.write("Sorry no relevant products found.")
-     for query_embedding in object_embeddings:
+    for query_embedding in object_embeddings:
        query_embedding = query_embedding.reshape(1, -1)
        similar_image_indices = search_similar_images(index, query_embedding, top_k=2) # Example: top_k=5 for 5 most similar
        for idx in similar_image_indices.flatten():
