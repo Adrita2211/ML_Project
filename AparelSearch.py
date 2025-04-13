@@ -88,7 +88,7 @@ if uploaded_file:
             st.subheader(f"Object {i+1} (Confidence: {conf:.2f})")
             st.image(cv2.resize(image_np[y1:y2, x1:x2], (200, 200)), caption="Detected Object")
             
-            st.write(f"Top {k} similar products:")
+            st.write(f"Top 2 similar products:")
             
             # Create columns for display
             cols = st.columns(k)
