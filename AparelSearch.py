@@ -59,24 +59,25 @@ if uploaded_file:
             query_embedding = query_embedding.flatten().reshape(1, -1)
             
             # Search similar images
-            distances, indices = index.search(query_embedding, k=3)  # Get top 3 matches
+            distances, indices = index.search(query_embedding, k=2)  # Get top 3 matches
             
             # Display results
             st.subheader(f"Object {i+1} (Confidence: {conf:.2f})")
-            
-            # Show the cropped query object
-            #st.image(cv2.resize(image_np[y1:y2, x1:x2], caption="Detected object", width=200))
             st.image(cv2.resize(image_np[y1:y2, x1:x2], (200, 200)), caption="Detected Object")
-            # Display similar images (you'll need a way to map indices to actual images)
-            st.write("Similar products:")
-           
-            for idx in indices[0]:
-                # This assumes you have a way to get the image from the index
-                # For example, if you have a list of image paths ordered the same as your index:
-                similar_img = Image.open(image_paths[idx])
-                st.image(similar_img, width=200)
-                #st.write(f"Match {idx} (Distance: {distances[0][idx]:.2f})")
-                # In a real implementation, you would display the actual image here
-                
+            
+            st.write("Top 2 similar products:")
+            
+            # Create columns for display
+            cols = st.columns(3)
+            
+            for col, idx, dist in zip(cols, indices[0], distances[0]):
+                with col:
+                    # Placeholder for actual image
+                    st.image("placeholder.jpg", caption=f"Product ID: {idx}\nSimilarity: {1-dist:.2f}")
+                    
+                    # In a real system, you would replace "placeholder.jpg" with:
+                    # img = get_product_image(idx)  # You would need to implement this
+                    # st.image(img, caption=f"Product {idx}")
+                    
     else:
         st.write("Sorry, no relevant products found.")
