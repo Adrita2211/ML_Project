@@ -8,6 +8,17 @@ from keras.preprocessing import image
 from keras.models import Model
 from PIL import Image
 
+# Image paths mapping (ensure these images exist in your directory)
+image_paths = {
+    0: "img_1.png",
+    1: "img_2.png",
+    2: "img_3.png",
+    3: "img_4.png",  # Added missing index 3
+    4: "img_5.png",
+    5: "img_6.png",  # Changed duplicate index 6 to 5
+    6: "img_7.png"
+}
+
 # Initialize models
 @st.cache_resource
 def load_model():
@@ -25,6 +36,19 @@ def getIndex():
 yolomodel = load_model()
 classificationmodel = load_classification_model()
 index = getIndex()
+
+def get_product_image(idx):
+    """Retrieve product image based on FAISS index"""
+    if idx in image_paths:
+        try:
+            img = Image.open(image_paths[idx])
+            return img
+        except FileNotFoundError:
+            st.error(f"Image not found: {image_paths[idx]}")
+            return None
+    else:
+        st.warning(f"No image mapping for index {idx}")
+        return None
 
 # Streamlit UI
 st.title("Visual Search App")
@@ -59,25 +83,27 @@ if uploaded_file:
             query_embedding = query_embedding.flatten().reshape(1, -1)
             
             # Search similar images
-            distances, indices = index.search(query_embedding, k=2)  # Get top 3 matches
+            k = min(3, index.ntotal)  # Don't request more matches than exist in index
+            distances, indices = index.search(query_embedding, k=k)
             
             # Display results
             st.subheader(f"Object {i+1} (Confidence: {conf:.2f})")
             st.image(cv2.resize(image_np[y1:y2, x1:x2], (200, 200)), caption="Detected Object")
             
-            st.write("Top 2 similar products:")
+            st.write(f"Top {k} similar products:")
             
             # Create columns for display
-            cols = st.columns(3)
+            cols = st.columns(k)
             
             for col, idx, dist in zip(cols, indices[0], distances[0]):
                 with col:
-                    # Placeholder for actual image
-                    st.image("placeholder.jpg", caption=f"Product ID: {idx}\nSimilarity: {1-dist:.2f}")
-                    
-                    # In a real system, you would replace "placeholder.jpg" with:
-                    # img = get_product_image(idx)  # You would need to implement this
-                    # st.image(img, caption=f"Product {idx}")
-                    
+                    similar_img = get_product_image(idx)
+                    if similar_img:
+                        st.image(similar_img, 
+                                width=200,
+                                caption=f"Product ID: {idx}\nSimilarity: {1-dist:.2f}")
+                    else:
+                        st.warning(f"No image for index {idx}")
+                
     else:
         st.write("Sorry, no relevant products found.")
