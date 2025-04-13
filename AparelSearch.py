@@ -69,15 +69,13 @@ if uploaded_file:
             st.image(cv2.resize(image_np[y1:y2, x1:x2], (200, 200)), caption="Detected Object")
             # Display similar images (you'll need a way to map indices to actual images)
             st.write("Similar products:")
-            
-            # Here you need to implement your logic to get actual images from the indices
-            # This is just a placeholder - you'll need to replace with your actual image retrieval logic
+           
             for idx in indices[0]:
                 # This assumes you have a way to get the image from the index
                 # For example, if you have a list of image paths ordered the same as your index:
-                # similar_img = Image.open(image_paths[idx])
-                # st.image(similar_img, width=200)
-                st.write(f"Match {idx} (Distance: {distances[0][idx]:.2f})")
+                similar_img = Image.open(image_paths[idx])
+                st.image(similar_img, width=200)
+                #st.write(f"Match {idx} (Distance: {distances[0][idx]:.2f})")
                 # In a real implementation, you would display the actual image here
                 
     else:
