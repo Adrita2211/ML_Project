@@ -81,9 +81,7 @@ if uploaded_file:
             # Generate embedding
             query_embedding = classificationmodel.predict(cropped_object)
             query_embedding = query_embedding.flatten().reshape(1, -1)
-            
-            # Search similar images
-            k = min(3, index.ntotal)  # Don't request more matches than exist in index
+            k=2
             distances, indices = index.search(query_embedding, k=k)
             
             # Display results
