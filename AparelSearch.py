@@ -81,14 +81,14 @@ if uploaded_file:
             # Generate embedding
             query_embedding = classificationmodel.predict(cropped_object)
             query_embedding = query_embedding.flatten().reshape(1, -1)
-            k=2
-            distances, indices = index.search(query_embedding, k=k)
+            k=3
+            distances, indices = index.search(query_embedding, k=3)
             
             # Display results
             st.subheader(f"Object {i+1} (Confidence: {conf:.2f})")
             st.image(cv2.resize(image_np[y1:y2, x1:x2], (200, 200)), caption="Detected Object")
             
-            st.write(f"Top 2 similar products:")
+            st.write(f"Top 3 similar products:")
             
             # Create columns for display
             cols = st.columns(k)
