@@ -65,8 +65,8 @@ if uploaded_file:
             st.subheader(f"Object {i+1} (Confidence: {conf:.2f})")
             
             # Show the cropped query object
-            st.image(cv2.resize(image_np[y1:y2, x1:x2], caption="Detected object", width=200))
-            
+            #st.image(cv2.resize(image_np[y1:y2, x1:x2], caption="Detected object", width=200))
+            st.image(cv2.resize(image_np[y1:y2, x1:x2], (200, 200)), caption="Detected Object")
             # Display similar images (you'll need a way to map indices to actual images)
             st.write("Similar products:")
             
