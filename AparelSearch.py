@@ -10,13 +10,13 @@ from PIL import Image
 
 # Image paths mapping (ensure these images exist in your directory)
 image_paths = {
-    0: "img_1.png",
-    1: "img_2.png",
-    2: "img_3.png",
-    3: "img_4.png",  # Added missing index 3
-    4: "img_5.png",
-    5: "img_6.png",  # Changed duplicate index 6 to 5
-    6: "img_7.png"
+    1: "img_1.png",
+    2: "img_2.png",
+    3: "img_3.png",
+    4: "img_4.png",  # Added missing index 3
+    5: "img_5.png",
+    6: "img_6.png",  # Changed duplicate index 6 to 5
+    7: "img_7.png"
 }
 
 # Initialize models
