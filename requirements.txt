@@ -1,13 +1,31 @@
-ultralytics
-joblib
-pillow
-numpy
-torch
-streamlit
-opencv-python-headless
-matplotlib
-faiss-cpu
-keras
-tensorflow
-pinecone
-boto3
+# Core Dependencies
+streamlit==1.22.0
+pinecone-client==3.0.0
+
+# Computer Vision & ML
+ultralytics==8.0.196  # YOLOv8 package
+opencv-python-headless==4.6.0.66
+Pillow==9.5.0
+
+# Numerical Computing
+numpy==1.23.5
+joblib==1.2.0
+
+# Deep Learning Frameworks
+torch==2.0.1
+torchvision==0.15.2
+tensorflow==2.10.1
+keras==2.10.0
+
+# Vector Search
+faiss-cpu==1.7.4
+
+# Visualization
+matplotlib==3.7.1
+
+# AWS Integration
+boto3==1.26.0
+
+# Additional Utilities
+tqdm==4.65.0  # Progress bars
+scikit-learn==1.2.2  # For various ML utilities
