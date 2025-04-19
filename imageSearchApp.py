@@ -9,20 +9,31 @@ from io import BytesIO
 import boto3
 
 # --- Initialize Pinecone ---
-pinecone = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+@st.cache_resource
+def init_pinecone():
+    return Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+pinecone = init_pinecone()
 index = pinecone.Index("visual-search-with-images")
 
 # --- Initialize AWS S3 ---
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=st.secrets["AWS_ACCESS_KEY"],
-    aws_secret_access_key=st.secrets["AWS_SECRET_KEY"]
-)
+@st.cache_resource
+def init_s3():
+    return boto3.client(
+        's3',
+        aws_access_key_id=st.secrets["AWS_ACCESS_KEY"],
+        aws_secret_access_key=st.secrets["AWS_SECRET_KEY"]
+    )
+
+s3 = init_s3()
 bucket_name = "ordermonitoringbucket"
 
 # --- Load VGG16 model ---
-base_model = VGG16(weights='imagenet')
-classificationmodel = Model(inputs=base_model.input, outputs=base_model.get_layer('fc1').output)
+@st.cache_resource
+def load_model():
+    base_model = VGG16(weights='imagenet')
+    return Model(inputs=base_model.input, outputs=base_model.get_layer('fc1').output)
+
+classificationmodel = load_model()
 
 # --- Function to get image embedding ---
 def get_image_embedding(pil_img):
