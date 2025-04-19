@@ -3,29 +3,29 @@ streamlit==1.22.0
 pinecone-client==3.0.0
 
 # Computer Vision & ML
-ultralytics==8.0.196  # YOLOv8 package
+ultralytics
 opencv-python-headless==4.6.0.66
-Pillow==9.5.0
+Pillow
 
 # Numerical Computing
-numpy==1.23.5
-joblib==1.2.0
+numpy
+joblib
 
 # Deep Learning Frameworks
-torch==2.0.1
-torchvision==0.15.2
-tensorflow==2.10.1
-keras==2.10.0
+torch
+torchvision
+tensorflow
+keras=
 
 # Vector Search
-faiss-cpu==1.7.4
+faiss-cpu
 
 # Visualization
-matplotlib==3.7.1
+matplotlib
 
 # AWS Integration
-boto3==1.26.0
+boto3
 
 # Additional Utilities
-tqdm==4.65.0  # Progress bars
-scikit-learn==1.2.2  # For various ML utilities
+tqdm
+scikit-learn=
