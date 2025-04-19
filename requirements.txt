@@ -9,3 +9,5 @@ matplotlib
 faiss-cpu
 keras
 tensorflow
+pinecone
+boto3
