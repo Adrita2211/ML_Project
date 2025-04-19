@@ -28,4 +28,4 @@ boto3
 
 # Additional Utilities
 tqdm
-scikit-learn=
+scikit-learn
