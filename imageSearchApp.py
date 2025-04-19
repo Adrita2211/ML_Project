@@ -73,31 +73,22 @@ if uploaded_file is not None:
     # Read and display uploaded image
     pil_image = Image.open(uploaded_file).convert('RGB')
     st.image(pil_image, caption='Uploaded Image.', use_column_width=True)
-
-    # Convert to numpy array for YOLO
     image_np = np.array(pil_image)
-
-    # --- Object Detection with YOLO ---
     results_yolo = model_yolo.predict(image_np)
     detections = results_yolo[0].boxes.data
-
     if detections.shape[0] > 0:
         for *xyxy, conf, cls in detections:
             x1, y1, x2, y2 = map(int, xyxy)
-            
             # Crop using PIL
             cropped_pil = pil_image.crop((x1, y1, x2, y2))
-            
             # Get embedding for cropped object
             query_embedding = get_image_embedding(cropped_pil)
-
             # Query Pinecone
             results_pinecone = index.query(
                 vector=query_embedding.tolist(),
                 top_k=2,
                 include_values=False
             )
-
             # Display similar images
             st.subheader("Similar Products:")
             if results_pinecone.matches:
