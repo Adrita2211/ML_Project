@@ -14,15 +14,15 @@ import matplotlib.pyplot as plt
 
 # --- Initialize Pinecone ---
 pinecone = Pinecone(
-    api_key=""
+    api_key=st.secrets["PINECONE_API_KEY"]
 )
 index = pinecone.Index("visual-search-with-images")  
 
 # --- Initialize AWS S3 ---
 s3 = boto3.client(
     's3',
-    aws_access_key_id="",
-    aws_secret_access_key=""
+    aws_access_key_id=st.secrets["AWS_SECRET_KEY"],
+    aws_secret_access_key=st.secrets["AWS_ACCESS_KEY"]
 )
 bucket_name = "ordermonitoringbucket"
 
