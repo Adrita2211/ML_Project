@@ -15,7 +15,7 @@ joblib
 torch
 torchvision
 tensorflow
-keras=
+keras
 
 # Vector Search
 faiss-cpu
