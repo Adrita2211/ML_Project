@@ -4,7 +4,7 @@ pinecone-client==3.0.0
 
 # Computer Vision & ML
 ultralytics
-opencv-python-headless==4.6.0.66
+opencv-contrib-python
 Pillow
 
 # Numerical Computing
