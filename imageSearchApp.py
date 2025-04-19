@@ -38,7 +38,7 @@ classificationmodel = load_classification_model()
 
 @st.cache_resource
 def load_model():
-    return YOLO('/content/best.pt')
+    return YOLO('best.pt')
 
 model_yolo = load_model()
 
