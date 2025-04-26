@@ -1,0 +1,81 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/Adrita2211/ML_Project/blob/ML_Project_branch/MultiTextClassification\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "#Multiclass classification using RNN and LSTM"
+      ],
+      "metadata": {
+        "id": "a4bNwGOtCxaa"
+      }
+    },
+    {
+      "source": [
+        "!pip install glove-python-binary"
+      ],
+      "cell_type": "code",
+      "metadata": {
+        "id": "cwg7g_pdI0d7",
+        "outputId": "40fae23c-7190-47fb-c252-d38cde07dee4",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        }
+      },
+      "execution_count": 2,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\u001b[31mERROR: Could not find a version that satisfies the requirement glove-python-binary (from versions: none)\u001b[0m\u001b[31m\n",
+            "\u001b[0m\u001b[31mERROR: No matching distribution found for glove-python-binary\u001b[0m\u001b[31m\n",
+            "\u001b[0m"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "glove_path=\"/content/glove.6B.50d.txt\""
+      ],
+      "metadata": {
+        "id": "VxkNminNK6HB"
+      },
+      "execution_count": 3,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [],
+      "metadata": {
+        "id": "VdjAnki0MP8r"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ],
+  "metadata": {
+    "colab": {
+      "name": "Welcome To Colab",
+      "provenance": [],
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "display_name": "Python 3",
+      "name": "python3"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 0
+}
