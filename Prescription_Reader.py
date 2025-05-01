@@ -5,8 +5,10 @@ import io
 
 # Configure GenAI client
 def get_genai_client():
-    api_key = st.secrets["GOOGLE_API_KEY"]
-    return genai.Client(api_key=api_key)
+    #api_key = st.secrets["GOOGLE_API_KEY"]
+    #return genai.Client(api_key=api_key)
+    key = st.secrets["GOOGLE_API_KEY"]
+    genai.configure(api_key=key)
 
 # Reuse your medicine parsing function
 def parse_medicine_data(content):
@@ -42,8 +44,9 @@ def main():
                                    type=["png", "jpg", "jpeg"])
     
     if uploaded_file is not None:
-        client = get_genai_client()
-        
+        #client = get_genai_client()
+        get_genai_client()
+        model = genai.GenerativeModel('gemini-2.0-flash')
         # Display uploaded image
         st.image(uploaded_file, caption="Uploaded Prescription", width=300)
         
@@ -54,8 +57,7 @@ def main():
                     file_bytes = uploaded_file.getvalue()
                     
                     # Generate content using your existing prompt
-                    response = client.models.generate_content(
-                        model="gemini-2.0-flash",
+                    response = model.generate_content(
                         contents=[{
                             "inline_data": {
                                 "mime_type": "image/png" if uploaded_file.name.endswith(".png") else "image/jpeg",
