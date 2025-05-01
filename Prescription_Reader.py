@@ -1,5 +1,6 @@
 import streamlit as st
 from google import genai
+from google.genai.types import Content, Part
 import re
 
 # Set your Google AI API key
@@ -35,30 +36,24 @@ uploaded_file = st.file_uploader("Upload a prescription image (PNG)", type="png"
 
 if uploaded_file is not None:
     try:
-        # Upload the file to Google AI
-        my_file = client.files.upload(file=uploaded_file)  
+        # Read image data
+        image_data = uploaded_file.read()
+        
+        # Create content parts
+        image_part = Part.from_data(image_data, mime_type="image/png")
+        text_part = Part.from_text(PROMPT)
+        content = Content(parts=[image_part, text_part])
         
         # Generate content using the prompt
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[my_file, PROMPT],
+            model="gemini-pro-vision",  # Correct vision-enabled model
+            contents=[content],
         )
         content = response.text
 
-        # Parse the response
-        #medicines = parse_medicine_data(content)
-
         if content:
             st.subheader("Medications Found:")
-	    st.write(content)
-            #for idx, med in enumerate(medicines, 1):
-                #st.write(f"**MEDICATION {idx}: {med['generic']} ({med['brand']})**")
-                #st.write(f"- Strength: {med['strength']}")
-                #st.write(f"- Dosage: {med['dosage']}")
-                #st.write("- Common Side Effects:")
-                #for eff in med['side_effects']:
-                    #st.write(f"   - {eff}")
-                #st.write(f"- Therapeutic Benefits: {med['benefits']}\n")
+            st.markdown(content)  # Render markdown properly
         else:
             st.warning("No medications found in the prescription.")
 
