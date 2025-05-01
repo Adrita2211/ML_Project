@@ -39,10 +39,19 @@ uploaded_file = st.file_uploader("Upload a prescription image (PNG)", type="png"
 if uploaded_file is not None:
     with st.spinner("Analyzing prescription..."):
         try:
-            # Generate response from Gemini
+           # Create Content objects for image and prompt
+            image_content = Content(
+                type="img/png",  # Or the appropriate MIME type for your image
+                parts=[uploaded_file.read()]
+            )
+            prompt_content = Content(
+                type="text/plain",
+                parts=[PROMPT]
+            )
+
             response = client.models.generate_content(
                 model="gemini-2.0-flash",
-                contents=[uploaded_file.read(), PROMPT],
+                contents=[image_content, prompt_content],  # Pass Content objects
             )
             
             # Handle response
