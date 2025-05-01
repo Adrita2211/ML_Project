@@ -2,15 +2,27 @@ import streamlit as st
 import google.generativeai as genai
 import re
 import io
+from PIL import Image
 
-# Configure GenAI client
-def get_genai_client():
-    #api_key = st.secrets["GOOGLE_API_KEY"]
-    #return genai.Client(api_key=api_key)
-    key = st.secrets["GOOGLE_API_KEY"]
-    genai.configure(api_key=key)
+# Configure GenAI client once at startup
+if "genai_configured" not in st.session_state:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    st.session_state.genai_configured = True
 
-# Reuse your medicine parsing function
+# Create model instance once
+if "model" not in st.session_state:
+    st.session_state.model = genai.GenerativeModel('gemini-1.5-flash')
+
+def optimize_image(image_bytes, max_size=1024):
+    """Resize image to reduce payload size"""
+    image = Image.open(io.BytesIO(image_bytes))
+    if max(image.size) > max_size:
+        image.thumbnail((max_size, max_size))
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='JPEG', quality=85)
+        return img_byte_arr.getvalue()
+    return image_bytes
+
 def parse_medicine_data(content):
     medicines = []
     pattern = r"""
@@ -34,40 +46,38 @@ def parse_medicine_data(content):
         medicines.append(medicine)
     return medicines
 
-# Streamlit UI
 def main():
     st.title("📋 Prescription Analyzer")
     st.markdown("Upload a prescription image to analyze medications and their details")
     
-    # File uploader
     uploaded_file = st.file_uploader("Choose a prescription image", 
                                    type=["png", "jpg", "jpeg"])
     
     if uploaded_file is not None:
-        #client = get_genai_client()
-        get_genai_client()
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        # Display uploaded image
         st.image(uploaded_file, caption="Uploaded Prescription", width=300)
         
         if st.button("Analyze Prescription"):
             with st.spinner("Analyzing medication details..."):
                 try:
-                    # Read file bytes
-                    file_bytes = uploaded_file.getvalue()
+                    # Optimize image before processing
+                    file_bytes = optimize_image(uploaded_file.getvalue())
                     
-                    # Generate content using your existing prompt
-                    response = model.generate_content(
-                        contents=[{
-                            "inline_data": {
-                                "mime_type": "image/png" if uploaded_file.name.endswith(".png") else "image/jpeg",
-                                "data": file_bytes
-                            }
-                        }, PROMPT],
-                    )
+                    # Create async task with timeout
+                    with st.status("Processing...", expanded=True) as status:
+                        st.write("🔍 Extracting prescription details...")
+                        response = st.session_state.model.generate_content(
+                            [
+                                {"inline_data": {
+                                    "mime_type": "image/jpeg",
+                                    "data": file_bytes
+                                }},
+                                PROMPT
+                            ],
+                            request_options={"timeout": 30}
+                        )
+                        status.update(label="Analysis complete!", state="complete")
+
                     content = response.text
-                    
-                    # Parse using your existing function
                     medicines = parse_medicine_data(content)
                     
                     if not medicines:
@@ -76,7 +86,6 @@ def main():
                     
                     st.success(f"✅ Found {len(medicines)} medications")
                     
-                    # Display results in expandable sections
                     for idx, med in enumerate(medicines, 1):
                         with st.expander(f"{med['generic']} ({med['brand']})", expanded=True):
                             col1, col2 = st.columns(2)
@@ -96,13 +105,16 @@ def main():
                                     st.markdown(f"- {eff}")
                                 st.markdown(f"**💊 Therapeutic Benefits:** {med['benefits']}")
                     
+                except genai.GenerationError as e:
+                    st.error(f"❌ API Error: {str(e)}")
+                except TimeoutError:
+                    st.error("⌛ Request timed out. Please try a smaller image or check your connection.")
                 except Exception as e:
-                    st.error(f"❌ Error processing prescription: {str(e)}")
-                    if 'content' in locals():
+                    st.error(f"❌ Unexpected error: {str(e)}")
+                    if 'response' in locals():
                         with st.expander("View Raw Response"):
-                            st.code(content)
+                            st.code(response.text)
 
-# Reuse your existing prompt
 PROMPT = """Analyze this medical prescription and:
 1. Identify ALL medications with EXACT dosage from the document
 2. For each medication, provide:
