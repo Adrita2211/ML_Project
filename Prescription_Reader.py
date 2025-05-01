@@ -1,4 +1,5 @@
 import streamlit as st
+import io
 from google import genai
 import re
 
@@ -29,10 +30,6 @@ Example:
 - Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
 - Benefits: Decreases hepatic glucose production → Improves glycemic control"""
 
-# Function to parse medicine data (same as before)
-def parse_medicine_data(content):
-    # ... (same code as in your original script) ...
-
 # Streamlit app
 st.title("Prescription Analyzer")
 
@@ -49,18 +46,26 @@ if uploaded_file is not None:
         # Upload the file using from_data
         my_file = client.files.upload(
             file=file_stream,
-            filename=uploaded_file.name,  # Optional: Provide original filename
+            filename=uploaded_file.name,  # Provide original filename
             mime_type="image/png"         # Set the correct MIME type
         )
         
+        # Generate response from Gemini
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[my_file, PROMPT],
         )
-        content = response.text
-        if content:
-            st.write(content)  
+        
+        # Handle response
+        if response.text:
+            st.subheader("Analysis Results:")
+            st.markdown(response.text)
         else:
-            st.warning("No content found in the response.")
+            st.warning("No content found in the response. Please check the prescription format.")
+            
     except Exception as e:
         st.error(f"Error processing prescription: {str(e)}")
+        st.error("Please ensure:")
+        st.error("- The image is a clear PNG of a prescription")
+        st.error("- The prescription text is readable")
+        st.error("- You have valid API credentials")
