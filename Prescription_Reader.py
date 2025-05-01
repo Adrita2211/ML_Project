@@ -1,5 +1,5 @@
 import streamlit as st
-from dotenv import load_dotenv
+
 import os
 from PIL import Image
 import google.generativeai as genai
