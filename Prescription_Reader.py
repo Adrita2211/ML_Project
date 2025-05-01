@@ -11,7 +11,7 @@ if "genai_configured" not in st.session_state:
 
 # Create model instance once
 if "model" not in st.session_state:
-    st.session_state.model = genai.GenerativeModel('gemini-1.5-flash')
+    st.session_state.model = genai.GenerativeModel('gemini-2.0-flash')
 
 def optimize_image(image_bytes, max_size=1024):
     """Resize image to reduce payload size"""
