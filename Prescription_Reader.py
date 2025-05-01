@@ -5,8 +5,8 @@ from PIL import Image
 import google.generativeai as genai
 
 # Load environment variables and configure API
-load_dotenv()
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+#load_dotenv()
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # Page configuration with custom theme
 st.set_page_config(
