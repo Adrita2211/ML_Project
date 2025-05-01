@@ -37,23 +37,18 @@ uploaded_file = st.file_uploader("Upload a prescription image (PNG)", type="png"
 
 if uploaded_file is not None:
     try:
-        # Read the uploaded file as bytes
-        file_bytes = uploaded_file.read()
+       image_bytes = uploaded_file.getvalue()
         
-        # Create an in-memory file-like object
-        file_stream = io.BytesIO(file_bytes)
-
-        # Upload the file using from_data
-        my_file = client.files.upload(
-            file=file_stream,
-            filename=uploaded_file.name,  # Provide original filename
-            mime_type="image/png"         # Set the correct MIME type
+        # Create image part using from_data
+        image_part = Part.from_data(
+            data=image_bytes,
+            mime_type="image/png"
         )
         
         # Generate response from Gemini
         response = client.models.generate_content(
             model="gemini-2.0-flash",
-            contents=[my_file, PROMPT],
+            contents=[image_part, PROMPT],
         )
         
         # Handle response
