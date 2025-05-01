@@ -1,4 +1,5 @@
-
+import streamlit as st
+import google.generativeai as genai
 # Create model
 model = genai.GenerativeModel('gemini-1.5-flash')
 
