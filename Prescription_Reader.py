@@ -40,7 +40,7 @@ if uploaded_file is not None:
        image_bytes = uploaded_file.getvalue()
         
         # Create image part using from_data
-        image_part = Part.from_data(
+       image_part = Part.from_data(
             data=image_bytes,
             mime_type="image/png"
         )
