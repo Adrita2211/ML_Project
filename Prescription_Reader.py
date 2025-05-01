@@ -3,7 +3,7 @@ from google import genai
 import re
 
 # Set your Google AI API key
-API_KEY = st.secrets["api_key"]  # Store your API key securely in Streamlit secrets
+API_KEY = st.secrets["GOOGLE_API_KEY"]  # Store your API key securely in Streamlit secrets
 client = genai.Client(api_key=API_KEY)
 
 # Define the prompt
