@@ -1,6 +1,7 @@
 import streamlit as st
 import io
 from google import genai
+from google.genai.types import Part  # Added missing import
 import re
 
 # Set your Google AI API key
@@ -37,10 +38,10 @@ uploaded_file = st.file_uploader("Upload a prescription image (PNG)", type="png"
 
 if uploaded_file is not None:
     try:
-       image_bytes = uploaded_file.getvalue()
+        image_bytes = uploaded_file.getvalue()
         
         # Create image part using from_data
-       image_part = Part.from_data(
+        image_part = Part.from_data(
             data=image_bytes,
             mime_type="image/png"
         )
