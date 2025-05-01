@@ -29,11 +29,6 @@ Example:
 - Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
 - Benefits: Decreases hepatic glucose production → Improves glycemic control"""
 
-# Function to parse medicine data (same as before)
-def parse_medicine_data(content):
-    # ... (same code as in your original script) ...
-
-# Streamlit app
 st.title("Prescription Analyzer")
 
 uploaded_file = st.file_uploader("Upload a prescription image (PNG)", type="png")
