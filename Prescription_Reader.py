@@ -100,8 +100,6 @@ def main():
                         status.update(label="Analysis complete!", state="complete")
 
                     content = response.text
-					st.write("displaying content")
-					st.write(content)
                     medicines = parse_medicine_data(content)
                     st.write("displaying medicines")
                     st.write(medicines)
