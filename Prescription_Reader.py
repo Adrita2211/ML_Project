@@ -100,7 +100,18 @@ def main():
                         status.update(label="Analysis complete!", state="complete")
 
                     content = response.text
-                    st.write(content)
+					st.write("displaying content")
+					st.write(content)
+                    medicines = parse_medicine_data(content)
+                    st.write("displaying medicines")
+                    st.write(medicines)
+                   
+                    
+                except Exception as e:
+                    st.error(f"❌ Error processing prescription: {str(e)}")
+                    if 'content' in locals():
+                        with st.expander("View Raw Response"):
+                            st.code(content)
 
 if __name__ == "__main__":
     main()
