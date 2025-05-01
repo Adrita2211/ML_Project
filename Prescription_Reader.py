@@ -1,72 +1,135 @@
 import streamlit as st
-import io
-import streamlit as st
 import google.generativeai as genai
-#from google import genai  # Remove or comment out this line
-from google.generativeai import Content  # Import Content directly
-import re
+from PIL import Image
 
-# Set your Google AI API key
-API_KEY = st.secrets["GOOGLE_API_KEY"]  # Store your API key securely in Streamlit secrets
-#client = genai.Client(api_key=API_KEY)
+# Configuration
+API_KEY = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=API_KEY)
 
-# Define the prompt
-PROMPT = """Analyze this medical prescription and:
-1. Identify ALL medications with EXACT dosage from the document
+# Custom CSS for better visualization
+st.markdown("""
+<style>
+    .medication-card {
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .warning-card {
+        background-color: #fff3cd;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# System Prompt with Enhanced Formatting
+SYSTEM_PROMPT = """**Prescription Analysis Task:**
+1. **Extract ALL medications** with EXACT dosage information
 2. For each medication, provide:
-   - Generic and brand names
-   - Precise dosage instructions
-   - 3 most common side effects
-   - Primary therapeutic benefits
-3. Format EXACTLY like:
+   - Generic name (Brand name in parentheses if available)
+   - Strength (exact value from document)
+   - Precise dosage instructions (verbatim)
+   - 3 most common side effects (prioritize frequency)
+   - Primary therapeutic benefits (mechanism → outcome)
+   - Drug class and pregnancy category (if available)
 
-**Medicine: [Generic Name] ([Brand Name])**
-- Strength: [Value from document]
-- Dosage: [Verbatim instructions]
-- Side Effects: 1. 2. 3.
-- Benefits: [Mechanism] → [Clinical outcome]
+**Output Format:**
+**Medicine: [Generic Name]** (Brand Name)
+- **Strength**: [Value]
+- **Dosage**: [Instructions]
+- **Side Effects**: 1. 2. 3.
+- **Benefits**: [Mechanism] → [Outcome]
+- **Class**: [Therapeutic Class]
+- **Pregnancy**: [Category]
 
-Example:
-**Medicine: Metformin (Glucophage)**
-- Strength: 500mg
-- Dosage: Take one tablet twice daily with meals
-- Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
-- Benefits: Decreases hepatic glucose production → Improves glycemic control"""
+**Example:**
+**Medicine: Metformin** (Glucophage)
+- **Strength**: 500mg
+- **Dosage**: Take one tablet twice daily with meals
+- **Side Effects**: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
+- **Benefits**: Decreases hepatic glucose production → Improves glycemic control
+- **Class**: Biguanide
+- **Pregnancy**: Category B"""
 
-# Streamlit app
-st.title("Prescription Analyzer")
-
-uploaded_file = st.file_uploader("Upload a prescription image (PNG)", type="png")
-model = genai.GenerativeModel('gemini-1.5-flash')
-if uploaded_file is not None:
-    with st.spinner("Analyzing prescription..."):
-        try:
-           # Create Content objects for image and prompt
-            image_content = Content(
-                type="img/png",  # Or the appropriate MIME type for your image
-                parts=[uploaded_file.read()]
+def analyze_prescription(image):
+    """Analyze prescription using Gemini Flash with advanced OCR capabilities"""
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    response = model.generate_content(
+        [
+            SYSTEM_PROMPT,
+            genai.types.Part.from_data(
+                data=image,
+                mime_type="image/png"
             )
-            prompt_content = Content(
-                type="text/plain",
-                parts=[PROMPT]
-            )
+        ],
+        generation_config={
+            "temperature": 0.1,
+            "max_output_tokens": 2000,
+        }
+    )
+    
+    return response.text
 
-            response = model.generate_content(
-                model="gemini-2.0-flash",
-                contents=[image_content, prompt_content],  # Pass Content objects
-            )
+# Streamlit UI
+st.title("Advanced Prescription Analyzer 🩺")
+st.caption("Medical-grade OCR powered by Google Gemini Flash")
+
+uploaded_file = st.file_uploader("Upload Prescription Image", 
+                                type=["png", "jpg", "jpeg"],
+                                help="Upload clear image of prescription (max 4MB)")
+
+if uploaded_file:
+    try:
+        # Validate image
+        img = Image.open(uploaded_file)
+        if img.size[0] * img.size[1] > 4000000:  # ~4MP limit
+            st.error("Image resolution too high. Please upload image under 4MP.")
+            st.stop()
             
-            # Handle response
-            if response.text:
-                st.subheader("Analysis Results:")
-                st.markdown(response.text)
-            else:
-                st.warning("No content found in the response. Please check the prescription format.")
-                
-        except Exception as e:
-            st.error(f"Error processing prescription: {str(e)}")
-            st.error("Please ensure:")
-            st.error("- The image is a clear PNG of a prescription")
-            st.error("- The prescription text is readable")
-            st.error("- You have valid API credentials")
+        with st.spinner("🔍 Analyzing prescription..."):
+            analysis = analyze_prescription(uploaded_file.getvalue())
+            
+        if analysis:
+            st.subheader("Analysis Results", divider="blue")
+            st.markdown(analysis, unsafe_allow_html=True)
+            
+            # Add safety warnings
+            st.markdown("""
+            <div class="warning-card">
+                ⚠️ **Important Notes:**
+                - Always consult your physician before taking medications
+                - Report any adverse effects immediately
+                - Store medications properly
+                - Check expiration dates
+            </div>
+            """, unsafe_allow_html=True)
+            
+    except Exception as e:
+        st.error(f"Analysis failed: {str(e)}")
+        st.error("Please ensure:")
+        st.error("- Clear image of a valid prescription")
+        st.error("- Legible text and proper lighting")
+        st.error("- Valid Google API credentials")
+
+# Sidebar with Instructions
+with st.sidebar:
+    st.header("Instructions")
+    st.markdown("""
+    1. Upload prescription image (PNG/JPG)
+    2. Wait for AI analysis (10-30 seconds)
+    3. Review structured medication data
+    4. Consult your physician for validation
+    
+    **Supported Content:**
+    - Handwritten/Rx pad prescriptions
+    - Digital medication lists
+    - Pharmacy labels
+    
+    **Limitations:**
+    - Cannot verify prescription validity
+    - No dosage recommendations
+    - Not a substitute for medical advice
+    """)
