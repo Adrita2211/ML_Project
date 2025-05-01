@@ -1,11 +1,12 @@
 import streamlit as st
-import google.generativeai as genai
-from PIL import Image
 import io
+from google import genai
+from google.genai.types import Part  # Added missing import
+import re
 
 # Set your Google AI API key
-API_KEY = st.secrets["GOOGLE_API_KEY"]
-genai.configure(api_key=API_KEY)
+API_KEY = st.secrets["GOOGLE_API_KEY"]  # Store your API key securely in Streamlit secrets
+client = genai.Client(api_key=API_KEY)
 
 # Define the prompt
 PROMPT = """Analyze this medical prescription and:
@@ -30,32 +31,30 @@ Example:
 - Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
 - Benefits: Decreases hepatic glucose production → Improves glycemic control"""
 
-
+# Streamlit app
 st.title("Prescription Analyzer")
 
 uploaded_file = st.file_uploader("Upload a prescription image (PNG)", type="png")
 
 if uploaded_file is not None:
-    try:
-        # Read image using PIL
-        img = Image.open(uploaded_file)
-        
-        # Create the model instance
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # Generate content with proper formatting
-        response = model.generate_content(
-            [
-                "Analyze this medical prescription and follow these instructions:\n" + PROMPT,
-                img
-            ]
-        )
-        
-        if response.text:
-            st.subheader("Analysis Results:")
-            st.markdown(response.text)
-        else:
-            st.warning("No valid response received from the model.")
+    with st.spinner("Analyzing prescription..."):
+        try:
+            # Generate response from Gemini
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=[uploaded_file.read(), PROMPT],
+            )
             
-    except Exception as e:
-        st.error(f"Error processing prescription: {str(e)}")
+            # Handle response
+            if response.text:
+                st.subheader("Analysis Results:")
+                st.markdown(response.text)
+            else:
+                st.warning("No content found in the response. Please check the prescription format.")
+                
+        except Exception as e:
+            st.error(f"Error processing prescription: {str(e)}")
+            st.error("Please ensure:")
+            st.error("- The image is a clear PNG of a prescription")
+            st.error("- The prescription text is readable")
+            st.error("- You have valid API credentials")
