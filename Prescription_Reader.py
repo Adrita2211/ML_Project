@@ -1,13 +1,15 @@
 import streamlit as st
 import io
-from google import genai
-from google.genai import Content
-from google.genai.types import Part  # Added missing import
+import streamlit as st
+import google.generativeai as genai
+#from google import genai  # Remove or comment out this line
+from google.generativeai import Content  # Import Content directly
 import re
 
 # Set your Google AI API key
 API_KEY = st.secrets["GOOGLE_API_KEY"]  # Store your API key securely in Streamlit secrets
-client = genai.Client(api_key=API_KEY)
+#client = genai.Client(api_key=API_KEY)
+genai.configure(api_key=API_KEY)
 
 # Define the prompt
 PROMPT = """Analyze this medical prescription and:
@@ -36,7 +38,7 @@ Example:
 st.title("Prescription Analyzer")
 
 uploaded_file = st.file_uploader("Upload a prescription image (PNG)", type="png")
-
+model = genai.GenerativeModel('gemini-1.5-flash')
 if uploaded_file is not None:
     with st.spinner("Analyzing prescription..."):
         try:
@@ -50,7 +52,7 @@ if uploaded_file is not None:
                 parts=[PROMPT]
             )
 
-            response = client.models.generate_content(
+            response = model.generate_content(
                 model="gemini-2.0-flash",
                 contents=[image_content, prompt_content],  # Pass Content objects
             )
