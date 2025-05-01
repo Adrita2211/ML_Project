@@ -1,6 +1,7 @@
 import streamlit as st
 import io
 from google import genai
+from google.genai import Content
 from google.genai.types import Part  # Added missing import
 import re
 
