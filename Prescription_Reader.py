@@ -100,4 +100,44 @@ def main():
                                 
                             with col2:
                                 st.subheader("⚕️ Clinical Information")
-                                st.mark
+                                st.markdown("**🚩 Common Side Effects:**")
+                                for eff in med['side_effects']:
+                                    st.markdown(f"- {eff}")
+                                st.markdown(f"**💊 Therapeutic Benefits:** {med['benefits']}")
+                    
+                except genai.GoogleAPIError as e:
+                    st.error(f"❌ API Error: {e}")
+                    if "SAFETY" in str(e):
+                        st.warning("⚠️ Content blocked by safety filters. Try a clearer prescription image.")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+                    if 'response' in locals():
+                        with st.expander("View Raw Response"):
+                            st.code(response.text)
+                    else:
+                        st.error("No response received from API")
+
+PROMPT = """Analyze this medical prescription and:
+1. Identify ALL medications with EXACT dosage from the document
+2. For each medication, provide:
+   - Generic and brand names
+   - Precise dosage instructions
+   - 3 most common side effects
+   - Primary therapeutic benefits
+3. Format EXACTLY like:
+
+**Medicine: [Generic Name] ([Brand Name])**
+- Strength: [Value from document]
+- Dosage: [Verbatim instructions]
+- Side Effects: 1. 2. 3.
+- Benefits: [Mechanism] → [Clinical outcome]
+
+Example:
+**Medicine: Metformin (Glucophage)**
+- Strength: 500mg
+- Dosage: Take one tablet twice daily with meals
+- Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
+- Benefits: Decreases hepatic glucose production → Improves glycemic control"""
+
+if __name__ == "__main__":
+    main()
