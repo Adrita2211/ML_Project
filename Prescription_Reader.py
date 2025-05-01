@@ -46,6 +46,28 @@ def parse_medicine_data(content):
         medicines.append(medicine)
     return medicines
 
+PROMPT = """Analyze this medical prescription and:
+1. Identify ALL medications with EXACT dosage from the document
+2. For each medication, provide:
+   - Generic and brand names
+   - Precise dosage instructions
+   - 3 most common side effects
+   - Primary therapeutic benefits
+3. Format EXACTLY like:
+
+**Medicine: [Generic Name] ([Brand Name])**
+- Strength: [Value from document]
+- Dosage: [Verbatim instructions]
+- Side Effects: 1. 2. 3.
+- Benefits: [Mechanism] → [Clinical outcome]
+
+Example:
+**Medicine: Metformin (Glucophage)**
+- Strength: 500mg
+- Dosage: Take one tablet twice daily with meals
+- Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
+- Benefits: Decreases hepatic glucose production → Improves glycemic control"""
+
 def main():
     st.title("📋 Prescription Analyzer")
     st.markdown("Upload a prescription image to analyze medications and their details")
@@ -79,28 +101,6 @@ def main():
 
                     content = response.text
                     st.write(content)
-
-PROMPT = """Analyze this medical prescription and:
-1. Identify ALL medications with EXACT dosage from the document
-2. For each medication, provide:
-   - Generic and brand names
-   - Precise dosage instructions
-   - 3 most common side effects
-   - Primary therapeutic benefits
-3. Format EXACTLY like:
-
-**Medicine: [Generic Name] ([Brand Name])**
-- Strength: [Value from document]
-- Dosage: [Verbatim instructions]
-- Side Effects: 1. 2. 3.
-- Benefits: [Mechanism] → [Clinical outcome]
-
-Example:
-**Medicine: Metformin (Glucophage)**
-- Strength: 500mg
-- Dosage: Take one tablet twice daily with meals
-- Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
-- Benefits: Decreases hepatic glucose production → Improves glycemic control"""
 
 if __name__ == "__main__":
     main()
