@@ -1,115 +1,161 @@
 import streamlit as st
-import google.generativeai as genai
-import re
-import io
+from dotenv import load_dotenv
+import os
 from PIL import Image
+import google.generativeai as genai
 
-# Configure GenAI client once at startup
-if "genai_configured" not in st.session_state:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    st.session_state.genai_configured = True
+# Load environment variables and configure API
+load_dotenv()
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# Create model instance once
-if "model" not in st.session_state:
-    st.session_state.model = genai.GenerativeModel('gemini-2.0-flash')
+# Page configuration with custom theme
+st.set_page_config(
+    page_title="Gemini Vision Pro",
+    page_icon="🔮",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-def optimize_image(image_bytes, max_size=1024):
-    """Resize image to reduce payload size"""
-    image = Image.open(io.BytesIO(image_bytes))
-    if max(image.size) > max_size:
-        image.thumbnail((max_size, max_size))
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='PNG', quality=85)
-        return img_byte_arr.getvalue()
-    return image_bytes
+# Custom CSS
+st.markdown("""
+    <style>
+    .main {
+        padding: 2rem;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 10px;
+        height: 3rem;
+        background-color: #FF4B4B;
+        color: white;
+        font-weight: bold;
+    }
+    .uploadedImage {
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .stTextArea>div>div>textarea {
+        border-radius: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-def parse_medicine_data(content):
-    medicines = []
-    pattern = r"""
-        \*\*Medicine:\s*(.+?)\s*\((.+?)\)\*\*
-        (?:- Strength:\s*(.+?)\n)?
-        - Dosage:\s*(.+?)\n
-        - Side Effects:\s*((?:1\..+?\n)+)
-        - Benefits:\s*(.+?)(?=\n\*\*|$)
-    """
-    matches = re.finditer(pattern, content, re.DOTALL | re.VERBOSE)
-    
-    for match in matches:
-        medicine = {
-            "generic": match.group(1).strip(),
-            "brand": match.group(2).strip(),
-            "strength": match.group(3).strip() if match.group(3) else "N/A",
-            "dosage": match.group(4).strip(),
-            "side_effects": [eff.strip() for eff in re.findall(r"\d+\.\s*(.+?)(?=\n\d+\.|$)", match.group(5))],
-            "benefits": match.group(6).strip()
-        }
-        medicines.append(medicine)
-    return medicines
+def get_gemini_response(input, image, prompt):
+    model = genai.GenerativeModel("gemini-2.0-flash-exp")
+    response = model.generate_content([input, image[0], prompt])
+    return response.text
 
-PROMPT = """Analyze this medical prescription and:
-1. Identify ALL medications with EXACT dosage from the document
-2. For each medication, provide:
-   - Generic and brand names
-   - Precise dosage instructions
-   - 3 most common side effects
-   - Primary therapeutic benefits
-3. Format EXACTLY like:
-
-**Medicine: [Generic Name] ([Brand Name])**
-- Strength: [Value from document]
-- Dosage: [Verbatim instructions]
-- Side Effects: 1. 2. 3.
-- Benefits: [Mechanism] → [Clinical outcome]
-
-Example:
-**Medicine: Metformin (Glucophage)**
-- Strength: 500mg
-- Dosage: Take one tablet twice daily with meals
-- Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
-- Benefits: Decreases hepatic glucose production → Improves glycemic control"""
-
-def main():
-    st.title("📋 Prescription Analyzer")
-    st.markdown("Upload a prescription image to analyze medications and their details")
-    
-    uploaded_file = st.file_uploader("Choose a prescription image", 
-                                   type=["png", "jpg", "jpeg"])
-    
+def input_image_setup(uploaded_file):
     if uploaded_file is not None:
-        st.image(uploaded_file, caption="Uploaded Prescription", width=300)
+        bytes_data = uploaded_file.getvalue()
+        image_parts = [{
+            "mime_type": uploaded_file.type,
+            "data": bytes_data
+        }]
+        return image_parts
+    raise FileNotFoundError("No file uploaded")
+
+# Sidebar with enhanced styling
+with st.sidebar:
+    st.title("🔮 Gemini Vision Pro")
+    st.markdown("---")
+    st.subheader("About")
+    st.markdown("""
+        Transform your images into insights with Gemini Vision Pro - powered by Google's 
+        advanced gemini-2.0-flash-exp model for lightning-fast image analysis.
         
-        if st.button("Analyze Prescription"):
-            with st.spinner("Analyzing medication details..."):
-                try:
-                    # Optimize image before processing
-                    file_bytes = optimize_image(uploaded_file.getvalue())
-                    
-                    # Create async task with timeout
-                    with st.status("Processing...", expanded=True) as status:
-                        st.write("🔍 Extracting prescription details...")
-                        response = st.session_state.model.generate_content(
-                            [
-                                {"inline_data": {
-                                    "mime_type": "image/png",
-                                    "data": file_bytes
-                                }},
-                                PROMPT
-                            ],
-                            request_options={"timeout": 30}
-                        )
-                        status.update(label="Analysis complete!", state="complete")
+        **Features:**
+        - Advanced OCR capabilities
+        - Multi-format support
+        - Real-time analysis
+        - High accuracy results
+    """)
+    st.markdown("---")
+    st.caption("Powered by Gemini AI 2.0")
 
-                    content = response.text
-                    medicines = parse_medicine_data(content)
-                    st.write("displaying medicines")
-                    st.write(medicines)
-                   
-                    
-                except Exception as e:
-                    st.error(f"❌ Error processing prescription: {str(e)}")
-                    if 'content' in locals():
-                        with st.expander("View Raw Response"):
-                            st.code(content)
+# Main content area with two columns
+col1, col2 = st.columns([3, 2])
 
-if __name__ == "__main__":
-    main()
+with col1:
+    st.title("📸 Image Analysis Studio")
+    st.markdown("Upload your image and let Gemini AI reveal the insights within.")
+    
+    input_prompt = st.text_area(
+        "What would you like to know about the image?",
+        placeholder="E.g., Extract all text and analyze the content in detail...",
+        height=100
+    )
+    
+    uploaded_file = st.file_uploader(
+        "Upload Image (JPEG/PNG)",
+        type=["jpg", "jpeg", "png"],
+        help="Drag and drop or click to upload"
+    )
+
+with col2:
+    st.markdown("<br>" * 4, unsafe_allow_html=True)  # Add some spacing
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Preview", use_column_width=True, clamp=True)
+    else:
+        st.info("👆 Upload an image to get started")
+
+# Analysis section
+if st.button("🔍 Analyze with Gemini AI", key="analyze"):
+    if not input_prompt.strip():
+        st.error("⚠️ Please enter a query first")
+    elif not uploaded_file:
+        st.error("⚠️ Please upload an image to analyze")
+    else:
+        with st.spinner("🤖 Gemini AI is analyzing your image..."):
+            try:
+                image_data = input_image_setup(uploaded_file)
+                detailed_prompt = """Analyze this medical prescription and:
+				1. Identify ALL medications with EXACT dosage from the document
+				2. For each medication, provide:
+				   - Generic and brand names
+				   - Precise dosage instructions
+				   - 3 most common side effects
+				   - Primary therapeutic benefits
+				3. Format EXACTLY like:
+
+				**Medicine: [Generic Name] ([Brand Name])**
+				- Strength: [Value from document]
+				- Dosage: [Verbatim instructions]
+				- Side Effects: 1. 2. 3.
+				- Benefits: [Mechanism] → [Clinical outcome]
+
+				Example:
+				**Medicine: Metformin (Glucophage)**
+				- Strength: 500mg
+				- Dosage: Take one tablet twice daily with meals
+				- Side Effects: 1. Nausea 2. Diarrhea 3. Abdominal discomfort
+                - Benefits: Decreases hepatic glucose production → Improves glycemic control"""
+                response = get_gemini_response(detailed_prompt, image_data, input_prompt)
+                
+                st.success("✨ Analysis Complete!")
+                st.markdown("### 📊 Analysis Results")
+                st.markdown(response)
+                
+                # Add option to download results
+                st.download_button(
+                    label="📥 Download Analysis",
+                    data=response,
+                    file_name="gemini_analysis.txt",
+                    mime="text/plain"
+                )
+                
+            except Exception as e:
+                st.error(f"🚫 An error occurred: {str(e)}")
+                st.info("💡 Tip: Try uploading a different image or refreshing the page")
+
+# Footer
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center'>
+        <p>Created with ❤️ using Streamlit and Gemini AI</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
