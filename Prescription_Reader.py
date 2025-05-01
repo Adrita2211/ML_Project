@@ -50,7 +50,7 @@ if uploaded_file is not None:
 
         if content:
             st.subheader("Medications Found:")
-			st.write(content)
+	    st.write(content)
             #for idx, med in enumerate(medicines, 1):
                 #st.write(f"**MEDICATION {idx}: {med['generic']} ({med['brand']})**")
                 #st.write(f"- Strength: {med['strength']}")
