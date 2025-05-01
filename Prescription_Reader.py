@@ -19,7 +19,7 @@ def optimize_image(image_bytes, max_size=1024):
     if max(image.size) > max_size:
         image.thumbnail((max_size, max_size))
         img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG', quality=85)
+        image.save(img_byte_arr, format='PNG', quality=85)
         return img_byte_arr.getvalue()
     return image_bytes
 
@@ -68,7 +68,7 @@ def main():
                         response = st.session_state.model.generate_content(
                             [
                                 {"inline_data": {
-                                    "mime_type": "image/jpeg",
+                                    "mime_type": "image/png",
                                     "data": file_bytes
                                 }},
                                 PROMPT
@@ -78,39 +78,7 @@ def main():
                         status.update(label="Analysis complete!", state="complete")
 
                     content = response.text
-                    medicines = parse_medicine_data(content)
-                    
-                    if not medicines:
-                        st.warning("⚠️ No medications found in the prescription")
-                        return
-                    
-                    st.success(f"✅ Found {len(medicines)} medications")
-                    
-                    for idx, med in enumerate(medicines, 1):
-                        with st.expander(f"{med['generic']} ({med['brand']})", expanded=True):
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.subheader("📝 Prescription Details")
-                                st.markdown(f"""
-                                - **Generic Name**: {med['generic']}
-                                - **Brand Name**: {med['brand']}
-                                - **Strength**: {med['strength']}
-                                - **Dosage**: {med['dosage']}
-                                """)
-                                
-                            with col2:
-                                st.subheader("⚕️ Clinical Information")
-                                st.markdown("**🚩 Common Side Effects:**")
-                                for eff in med['side_effects']:
-                                    st.markdown(f"- {eff}")
-                                st.markdown(f"**💊 Therapeutic Benefits:** {med['benefits']}")
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
-                    if 'response' in locals():
-                        with st.expander("View Raw Response"):
-                            st.code(response.text)
-                    else:
-                        st.error("No response received from API")
+                    st.write(content)
 
 PROMPT = """Analyze this medical prescription and:
 1. Identify ALL medications with EXACT dosage from the document
