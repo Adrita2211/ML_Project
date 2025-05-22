@@ -280,7 +280,7 @@ mood_agent = AssistantAgent(
      "Use emojis to enhance emotional connection and keep the tone light and encouraging."
      ))
 
-user_proxy = UserProxyAgent(name="user_proxy", human_input_mode="NEVER")
+user_proxy = UserProxyAgent(name="user_proxy", human_input_mode="NEVER",code_execution_config={"work_dir":"coding", "use_docker":False})
 
 
 # --- Appointment Helpers ---
