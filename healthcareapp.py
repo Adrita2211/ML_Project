@@ -212,7 +212,6 @@ conflict_agent = AssistantAgent(
     llm_config={
         "model":
         "gpt-4o",
-        "api_key":
         "api_key":st.secrets["AZURE_OPEN_AI_KEY"],
         "api_type":
         "azure",
