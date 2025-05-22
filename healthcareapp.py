@@ -217,7 +217,6 @@ conflict_agent = AssistantAgent(
         "azure",
         "api_version":
         "2024-12-01-preview",
-        "base_url":
         "base_url":st.secrets["AZURE_GPT4_URL"]
     },
     system_message=
