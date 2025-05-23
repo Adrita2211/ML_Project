@@ -58,7 +58,13 @@ class MedicalAgent:
         self.agent_prompts = {
             AgentType.DOCUMENT_ANALYZER: {
                 "system":
-                "Analyze medical reports and provide:\n- Report Details\n- Trend analysis\n- Lifestyle recommendations\n- Urgency indicators\nFormat in markdown.",
+                 "system": """Analyze medical reports and provide:
+                - Highlight key findings with color-coded severity markers.\n"
+                - Summary of diagnoses and treatments
+                Trend Analysis**: Graphs and charts to show health progression             over time.\n"
+                - **Lifestyle Recommendations**: Tailored advice with icons for             diet, exercise, and other wellness factors.\n"
+               - **Urgency Indicators**: Use alert symbols to emphasize critical           concerns.\n"
+                Format in markdown with tables and bullet points""",
                 "temperature": 0.1
             },
             AgentType.PRESCRIPTION_READER: {
