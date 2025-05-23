@@ -57,7 +57,6 @@ class MedicalAgent:
 
         self.agent_prompts = {
             AgentType.DOCUMENT_ANALYZER: {
-                "system":
                  "system": """Analyze medical reports and provide:
                 - Highlight key findings with color-coded severity markers.\n"
                 - Summary of diagnoses and treatments
