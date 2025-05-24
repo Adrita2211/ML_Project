@@ -8,3 +8,5 @@ azure-ai-documentintelligence>=1.0.0b1
 azure-cosmos>=4.5.1
 python-dateutil>=2.8.2
 autogen
+libuuid
+azure-cognitiveservices-speech
