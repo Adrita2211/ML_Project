@@ -11,6 +11,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.cosmos import CosmosClient, PartitionKey
 from autogen import AssistantAgent, UserProxyAgent
 from dateutil import parser as date_parser
+import azure.cognitiveservices.speech as speechsdk
 # --- Cosmos DB Config ---
 COSMOS_ENDPOINT =st.secrets["COSMOS_DB_ENDPOINT_URL"] 
 COSMOS_KEY = st.secrets["COSMOS_DB_KEY"]
@@ -29,6 +30,10 @@ class AgentType(Enum):
     DOCUMENT_ANALYZER = 1
     PRESCRIPTION_READER = 2
     HEALTH_ADVISOR = 3
+
+#speech configuration
+SPEECH_KEY = st.secrets["AZURE_SPEECH_KEY"] 
+SPEECH_REGION = "centralindia"
 
 
 # --- Medical Agent Class ---
@@ -348,6 +353,25 @@ def handle_booking_request(user_input):
     except Exception as e:
         return f"❌ Error booking: {e}"
 
+def synthesize_speech(text: str) -> bytes:
+    """Convert text to speech using Azure Cognitive Services"""
+    speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY,
+                                           region=SPEECH_REGION)
+    speech_config.speech_synthesis_voice_name = "en-US-JennyNeural"
+
+    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config,
+                                              audio_config=None)
+
+    try:
+        result = synthesizer.speak_text_async(text).get()
+        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+            return result.audio_data
+        else:
+            st.error(f"Speech synthesis failed: {result.reason}")
+            return None
+    except Exception as e:
+        st.error(f"Speech synthesis error: {str(e)}")
+        return None
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="MediGenie", layout="wide")
@@ -387,6 +411,7 @@ with tab3:
         "Choose Support Type",
         ["CBT Support", "Mood Tracking", "General Health Info"])
     user_input = st.text_area("Your input:")
+
     if st.button("Submit") and user_input:
         with st.spinner("Processing..."):
             if mode == "CBT Support":
@@ -401,7 +426,16 @@ with tab3:
                 result = user_proxy.initiate_chat(recipient=research_agent,
                                                   message=user_input,
                                                   max_turns=3)
-            st.markdown(result.chat_history[-1]["content"])
+
+            response_text = result.chat_history[-1]["content"]
+            st.markdown(response_text)
+
+            # Add text-to-speech functionality
+            audio_data = synthesize_speech(response_text)
+            if audio_data:
+                st.audio(audio_data, format="audio/wav", start_time=0)
+                st.success(
+                    "Audio playback ready! Click the play button above.")
 
 with tab4:
     st.header("Book a Doctor Appointment")
