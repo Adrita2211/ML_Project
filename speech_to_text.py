@@ -2,7 +2,7 @@ import streamlit as st
 import azure.cognitiveservices.speech as speechsdk
 import openai
 from openai import AzureOpenAI
-
+from azure.core.credentials import AzureKeyCredential
 #speech configuration
 SPEECH_KEY = st.secrets["AZURE_SPEECH_KEY"] 
 SPEECH_REGION = "centralindia"
