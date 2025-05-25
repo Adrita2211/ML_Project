@@ -17,7 +17,7 @@ api_version = "2024-12-01-preview"
 client = AzureOpenAI(
     api_version="2024-12-01-preview",
     endpoint="https://azureaihub17053356581548.cognitiveservices.azure.com/",
-    credential=AzureKeyCredential("<API_KEY>")
+    credential=AzureKeyCredential(subscription_key)
 )
 
 def recognize_speech():
