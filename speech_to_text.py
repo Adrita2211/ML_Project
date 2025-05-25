@@ -11,15 +11,16 @@ endpoint = "https://azureaihub17053356581548.cognitiveservices.azure.com/"
 model_name = "gpt-4o"
 deployment = "gpt-4o"
 
-subscription_key = "FRmMLpsNo2ChMwxpD25GvaQ8spL4nNTDoOv8QcSKPVCacU29hO4JJQQJ99BEAC77bzfXJ3w3AAAAACOGA1GC"
+subscription_key = ""
 api_version = "2024-12-01-preview"
 
 client = AzureOpenAI(
-    api_version="2024-12-01-preview",
-    endpoint="https://azureaihub17053356581548.cognitiveservices.azure.com/",
-    credential=AzureKeyCredential(subscription_key)
-)
-
+                api_version="2024-05-01-preview",
+                azure_endpoint=
+                st.secrets["AZURE_OPEN_AI_ENDPOINT"],
+                api_key=
+                st.secrets["AZURE_OPEN_AI_KEY"]
+         )
 def recognize_speech():
     speech_config = speechsdk.SpeechConfig(subscription="YOUR_AZURE_SPEECH_KEY", region="YOUR_REGION")
     recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
