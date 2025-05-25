@@ -23,8 +23,8 @@ client = AzureOpenAI(
          )
 def recognize_speech():
     speech_config = speechsdk.SpeechConfig(subscription="YOUR_AZURE_SPEECH_KEY", region="YOUR_REGION")
-    recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
-    
+    audio_config = speechsdk.AudioConfig(use_default_microphone=True)
+    recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
     print("Speak now...")
     result = recognizer.recognize_once()
     
