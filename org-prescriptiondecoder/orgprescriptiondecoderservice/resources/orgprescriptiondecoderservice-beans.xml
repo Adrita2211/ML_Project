@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!-- Copyright (c) 2021 SAP SE or an SAP affiliate company. All rights reserved. -->
+<!-- ATTENTION: This is just an example file. You have to edit it according 
+	to your needs. -->
+
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="beans.xsd">
+
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.OrgPrescriptionDecoderRequestData">
+		<property name="model" type="String" />
+		<property name="document"
+			type="de.hybris.platform.orgprescriptiondecoderservice.data.OrgPrescriptionDecoderDocumentData" />
+		<property name="include_image_base64" type="boolean" />
+	</bean>
+
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.OrgPrescriptionDecoderDocumentData">
+		<property name="type" type="String" />
+		<property name="image_url" type="String" />
+	</bean>
+
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.OrgPrescriptionDecoderResponseData">
+		<property name="pages"
+			type="java.util.List&lt;de.hybris.platform.orgprescriptiondecoderservice.data.OrgPrescriptionDecoderPageData>" />
+		<property name="model" type="String" />
+	</bean>
+
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.OrgPrescriptionDecoderPageData">
+		<property name="index" type="java.lang.Integer" />
+		<property name="markdown" type="String" />
+	</bean>
+
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.PartsData">
+		<property name="text" type="String" />
+	</bean>
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.ContentsData">
+		<property name="parts"
+			type="de.hybris.platform.orgprescriptiondecoderservice.data.PartsData" />
+	</bean>
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.OrgLLMRequestData">
+		<property name="contents"
+			type="de.hybris.platform.orgprescriptiondecoderservice.data.ContentsData" />
+	</bean>
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.ContentData">
+		<property name="parts"
+			type="java.util.List&lt;de.hybris.platform.orgprescriptiondecoderservice.data.PartsData>" />
+	</bean>
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.CandidatesData">
+		<property name="content"
+			type="de.hybris.platform.orgprescriptiondecoderservice.data.ContentData" />
+	</bean>
+	<bean
+		class="de.hybris.platform.orgprescriptiondecoderservice.data.OrgLLMResponseData">
+		<property name="candidates"
+			type="java.util.List&lt;de.hybris.platform.orgprescriptiondecoderservice.data.CandidatesData>" />
+	</bean>
+
+</beans>

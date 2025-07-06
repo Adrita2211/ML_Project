@@ -1,0 +1,144 @@
+<hybrisconfig xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:noNamespaceSchemaLocation='../bin/platform/resources/schemas/extensions.xsd'>
+  <extensions>
+    <path dir='${HYBRIS_BIN_DIR}' autoload='false' depth="10"/>
+    <extension name='adaptivesearchsolr' />
+    <extension name='adaptivesearchbackoffice' />
+    <extension name='adaptivesearchsamplesaddon' />
+    <extension name='adaptivesearchwebservices' />
+    <extension name='b2bcommercebackoffice' />
+    <extension name='solrfacetsearchbackoffice' />
+    <extension name='yacceleratorbackoffice' />
+    <extension name='yacceleratorinitialdata' />
+    <extension name='yacceleratorfulfilmentprocess' />
+
+    <extension name='orderselfserviceaddon' />
+    <extension name='powertoolsstore' />
+    <extension name='solrserver' />
+    <extension name='acceleratorwebservicesaddon' />
+    <extension name='b2bacceleratoraddon' />
+    <extension name='commerceorgsamplesaddon' />
+    <extension name='b2bpunchoutaddon' />
+    <!--<extension name='secureportaladdon' />-->
+    <extension name='savedorderformsoccaddon' />
+    <extension name='b2boccaddon' />
+    <extension name='accountsummaryaddon' />
+    <extension name='assistedservicestorefront' />
+    <extension name='assistedservicewebservices' />
+    <extension name='captchaaddon' />
+    <extension name='customerticketingaddon' />
+    <extension name='customersupportbackoffice' />
+    <extension name='rulebuilderbackoffice' />
+    <extension name='couponbackoffice' />
+    <extension name='droolsruleengineservices' />
+    <extension name='couponfacades' />
+    <extension name='couponservices' />
+    <extension name='promotionenginesamplesaddon' />
+    <extension name='textfieldconfiguratortemplatebackoffice' />
+    <extension name='textfieldconfiguratortemplateaddon' />
+    <extension name='cmswebservices' />
+    <extension name='smarteditwebservices' />
+    <extension name='permissionswebservices' />
+    <extension name='smarteditaddon' />
+    <extension name='cmssmartedit' />
+    <extension name='cmsbackoffice' />
+    <extension name='previewwebservices' />
+    <extension name='cmssmarteditwebservices' />
+    <extension name='cmsoccaddon' />
+    <extension name='previewpersonalizationweb' />
+    <extension name='personalizationcmsweb' />
+    <extension name='personalizationsmartedit' />
+    <extension name='personalizationpromotionssmartedit' />
+    <extension name='personalizationsampledataaddon' />
+    <extension name='personalizationpromotionssampledataaddon' />
+    <extension name='personalizationpromotions' />
+    <extension name='personalizationpromotionsweb' />
+    <extension name='personalizationservicesbackoffice' />
+    <extension name='personalizationpromotionsbackoffice' />
+    <extension name='personalizationcmsbackoffice' />
+    <extension name='personalizationsearchbackoffice' />
+    <extension name='personalizationsearchsmartedit' />
+    <extension name='personalizationsearchweb' />
+    <extension name='personalizationsearchsamplesaddon' />
+    <extension name='consignmenttrackingaddon' />
+    <extension name='consignmenttrackingmock' />
+    <extension name='consignmenttrackingbackoffice' />
+    <extension name='pcmbackofficesamplesaddon' />
+    <extension name='configurablebundleaddon' />
+    <extension name='configurablebundlebackoffice' />
+    <extension name='consignmenttrackingoccaddon' />
+    <extension name='outboundservices' />
+    <extension name='odata2webservices' />
+   <!-- <extension name='odata2webservicesfeaturetests' />
+
+    <extension name='kymaintegrationbackoffice' />
+   <extension name='kymaintegrationsampledata' />
+   <extension name='yb2bacceleratorstorefront' />-->
+	
+	<extension name="orginfluenzaaddon" />
+	<extension name="orginfluenzacore" />
+	<extension name="orginfluenzafacades" />
+	<!--<extension name="orglicenseaddon"/>-->
+	<!--<extension name="orgasmcore" />-->
+	
+	<extension name="orgselectoraddon" />
+	<extension name="orgaccountaddon" />
+	
+     <extension name="orglicenseservices"/>
+    <extension name="orglicensefacades"/>
+    <extension name="orglicenseocc"/>
+	
+	<extension name="orgasmocc"/>
+	
+
+    <extension name='yb2bacceleratorstorefront' />
+	<extension name='commercefacades' />
+    <extension name='commerceservices' />
+    <extension name='commerceservicesbackoffice' />
+    <extension name='commercewebservices' />
+    <extension name='commercewebservicescommons' />
+    <extension name='commercewebservicestests' />
+	
+	<extension name='spartacussampledata' />
+	<extension name='swaggerintegration' />
+	<extension name='cms2' />
+    <extension name='cms2lib' />
+    <extension name='cmsbackoffice' />
+    <extension name='cmscockpit' />
+    <extension name='cmsfacades' />
+    <extension name='cmsocc' />
+    <extension name='cmswebservices' />
+	<extension name='b2bocc' />
+	<extension name='b2bocctests' />
+	
+	<extension name='subscriptionbundlebackoffice' />
+    <extension name='subscriptionbundlecockpits' />
+    <extension name='subscriptionbundlefacades' />
+    <extension name='subscriptionbundleservices' />
+    <extension name='subscriptionbackoffice' />
+    <extension name='subscriptioncockpits' />
+    <extension name='subscriptionfacades' />
+    <extension name='subscriptionservices' />
+	
+	<extension name='mediaconversionbackoffice' />
+	<extension name='mediaconversion' />
+    <extension name="electronicsstore"/>
+    <extension name="xyformsservices"/>
+    <extension name="warehousing"/>
+   <!-- <extension name="spartacussampledata"/>-->
+    <extension name="lsb2bocc"/>
+    <extension name="acceleratorocc"/>
+    <extension name="sapproductconfigfacades"/>
+    <extension name="orgselectorocc"/>
+
+	<extension name="orginfluenzaocc"/>
+    <extension name="notificationocc"/>
+	<extension name="customerinterestsocc"/>	
+	<extension name="orginvaddon" />
+	<extension name="orginventoryfacades" />
+	<extension name="orginventoryservices" />
+	<extension name="orginvocc"/>
+	<extension name="orgprescriptiondecoderservice" />
+	<extension name="orgprescriptiondecoderocc" />
+	
+  </extensions>
+</hybrisconfig>
