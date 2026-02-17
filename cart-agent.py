@@ -8,7 +8,8 @@ from langchain_openai import ChatOpenAI
 import os
 
 # Set up environment variables (replace with your actual key)
-os.environ["OPENAI_API_KEY"] = "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"
+openai_api_key = st.secrets["OPENAI_API_KEY"]
+os.environ["OPENAI_API_KEY"] = openai_api_key
 
 # Ticket and User Management Classes
 class Ticket:
