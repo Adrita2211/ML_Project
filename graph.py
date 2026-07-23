@@ -19,6 +19,21 @@ from web_search import web_search
 GROQ_MODEL = "llama-3.1-8b-instant"
 LOG_PATH = os.path.join(os.path.dirname(__file__), "feedback_log.jsonl")
 
+REWRITE_QUESTION_PROMPT = ChatPromptTemplate.from_template(
+    """Given the conversation history and a follow-up question, rewrite the follow-up
+question into a standalone question that contains all context needed to understand it
+without the history (resolve pronouns and implicit references like "it", "that",
+"the same issue"). If the follow-up is already standalone, return it unchanged. Do not
+answer the question — only rewrite it. Return just the rewritten question, no commentary.
+
+Conversation history:
+{history}
+
+Follow-up question: {question}
+
+Standalone question:"""
+)
+
 REFINE_PROMPT = ChatPromptTemplate.from_template(
     """Given the question and the source text below, extract ONLY the sentences
 that are directly relevant to answering the question. Discard everything else.
@@ -60,6 +75,8 @@ Answer:"""
 
 class CRAGState(TypedDict):
     question: str
+    chat_history: list[dict]
+    standalone_question: str
     docs: list[str]
     grades: list[dict]
     overall_verdict: str
@@ -75,17 +92,30 @@ def _build_graph():
     retriever = vector_store.as_retriever(search_kwargs={"k": 3})
     grader_chain = build_grader()
     llm = ChatGroq(model=GROQ_MODEL, temperature=0)
+    rewrite_question_chain = REWRITE_QUESTION_PROMPT | llm
     refine_chain = REFINE_PROMPT | llm
     generate_chain = GENERATE_PROMPT | llm
 
+    def rewrite_question(state: CRAGState) -> dict:
+        history = state.get("chat_history") or []
+        if not history:
+            return {"standalone_question": state["question"]}
+        # Only the last few turns — enough to resolve references without
+        # letting unrelated older turns bias retrieval for the current one.
+        history_text = "\n".join(f"{m['role']}: {m['content']}" for m in history[-6:])
+        standalone = rewrite_question_chain.invoke(
+            {"history": history_text, "question": state["question"]}
+        ).content.strip()
+        return {"standalone_question": standalone}
+
     def retrieve(state: CRAGState) -> dict:
-        docs = retriever.invoke(state["question"])
+        docs = retriever.invoke(state["standalone_question"])
         return {"docs": [d.page_content for d in docs]}
 
     def grade(state: CRAGState) -> dict:
         grades = []
         for doc in state["docs"]:
-            result: GradeResult = grade_document(grader_chain, state["question"], doc)
+            result: GradeResult = grade_document(grader_chain, state["standalone_question"], doc)
             grades.append(result.model_dump())
 
         verdicts = [g["verdict"] for g in grades]
@@ -98,7 +128,7 @@ def _build_graph():
         return {"grades": grades, "overall_verdict": overall}
 
     def check_incidents(state: CRAGState) -> dict:
-        return {"incident": check_incident(state["question"])}
+        return {"incident": check_incident(state["standalone_question"])}
 
     def route_after_grade(state: CRAGState) -> str:
         return "refine" if state["overall_verdict"] == "correct" else "web_fallback"
@@ -119,13 +149,15 @@ def _build_graph():
             if g["verdict"] == "correct"
         ]
         combined = "\n\n".join(kept_docs)
-        refined = refine_chain.invoke({"question": state["question"], "text": combined}).content
+        refined = refine_chain.invoke(
+            {"question": state["standalone_question"], "text": combined}
+        ).content
         context = _incident_block(state) + refined
         source = "docs+incident" if state.get("incident") else "docs"
         return {"context": context.strip(), "source": source}
 
     def web_fallback(state: CRAGState) -> dict:
-        results = web_search(state["question"])
+        results = web_search(state["standalone_question"])
         combined = "\n\n".join(results)
 
         # A real search API almost never returns zero results, even for
@@ -143,7 +175,7 @@ def _build_graph():
         # GENERATE_PROMPT's explicit "don't invent specifics" instruction.
         web_verdict = "incorrect"
         if combined.strip():
-            web_grade: GradeResult = grade_document(grader_chain, state["question"], combined)
+            web_grade: GradeResult = grade_document(grader_chain, state["standalone_question"], combined)
             web_verdict = web_grade.verdict
 
         context = _incident_block(state)
@@ -157,7 +189,7 @@ def _build_graph():
 
     def generate(state: CRAGState) -> dict:
         answer = generate_chain.invoke(
-            {"context": state["context"], "question": state["question"]}
+            {"context": state["context"], "question": state["standalone_question"]}
         ).content
         return {"answer": answer}
 
@@ -174,6 +206,7 @@ def _build_graph():
         record = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "question": state["question"],
+            "standalone_question": state.get("standalone_question"),
             "overall_verdict": state.get("overall_verdict"),
             "grades": state.get("grades"),
             "web_verdict": state.get("web_verdict"),
@@ -186,6 +219,7 @@ def _build_graph():
         return {}
 
     workflow = StateGraph(CRAGState)
+    workflow.add_node("rewrite_question", rewrite_question)
     workflow.add_node("retrieve", retrieve)
     workflow.add_node("grade", grade)
     workflow.add_node("check_incidents", check_incidents)
@@ -195,7 +229,8 @@ def _build_graph():
     workflow.add_node("escalate", escalate)
     workflow.add_node("log", log)
 
-    workflow.set_entry_point("retrieve")
+    workflow.set_entry_point("rewrite_question")
+    workflow.add_edge("rewrite_question", "retrieve")
     workflow.add_edge("retrieve", "grade")
     workflow.add_edge("grade", "check_incidents")
     workflow.add_conditional_edges(
