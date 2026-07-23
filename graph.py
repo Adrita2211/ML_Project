@@ -34,7 +34,11 @@ Source text:
 GENERATE_PROMPT = ChatPromptTemplate.from_template(
     """You are a customer support assistant. Answer the question using ONLY the
 context below. Do not use outside knowledge and do not invent any information,
-incidents, ticket numbers, or ETAs that are not explicitly present in the context.
+incidents, ticket numbers, ETAs, product names, connectors, or step-by-step
+instructions that are not explicitly present in the context. If the context does
+not contain enough detail to answer the question, say plainly that you don't have
+verified information on that and recommend escalating to a human agent — do not
+fill the gap with a plausible-sounding guess.
 
 PRECEDENCE RULE: the context will contain a section starting with the literal
 marker "[ACTIVE INCIDENT]" if and only if there is a real, currently active
@@ -131,6 +135,12 @@ def _build_graph():
         # instead of ever reaching the escalation guard. So: grade the
         # combined web content against the question the same way docs are
         # graded, and treat "incorrect" web content as no usable context.
+        # "ambiguous" is still included — generic-but-real web content (e.g.
+        # a genuine explanation of how SSO works) legitimately grades
+        # "ambiguous" rather than a strict "correct", and discarding it
+        # entirely caused answerable questions to escalate needlessly.
+        # Fabrication risk on weak/irrelevant context is instead handled by
+        # GENERATE_PROMPT's explicit "don't invent specifics" instruction.
         web_verdict = "incorrect"
         if combined.strip():
             web_grade: GradeResult = grade_document(grader_chain, state["question"], combined)
