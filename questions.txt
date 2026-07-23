@@ -9,3 +9,4 @@ Why did the dates in my CSV file change after I opened it in Excel — like 03/0
 Why does my CSV file have an extra blank row at the very end after I open it?
 
 How do I set up SSO login using the Zorblex Identity Vault v9.2 connector?
+Why am I getting a CORS error when calling the API from my browser?explain in detail
