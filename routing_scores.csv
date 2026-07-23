@@ -1,0 +1,5 @@
+question,expected_route,actual_route,correct
+How do I reset my password?,docs,docs,True
+What are the default API rate limits on the Pro plan?,docs,docs,True
+How does SSO login work and how long does it take?,web+incident,web+incident,True
+My exported CSV file shows garbled/broken special characters when I open it in Excel — why does that happen?,web,web,True
