@@ -7,6 +7,7 @@ app.py, and set GROQ_API_KEY / TAVILY_API_KEY under the app's Secrets
 
 import os
 
+import groq
 import streamlit as st
 
 # Streamlit Cloud secrets -> env vars, so the existing graph.py/web_search.py
@@ -73,8 +74,17 @@ if question:
         st.markdown(question)
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            result = graph.invoke({"question": question, "chat_history": chat_history})
+        try:
+            with st.spinner("Thinking..."):
+                result = graph.invoke({"question": question, "chat_history": chat_history})
+        except groq.RateLimitError:
+            st.error(
+                "Groq's free-tier rate limit was hit (this pipeline makes several "
+                "LLM calls per question). Please wait about a minute and try again."
+            )
+            st.session_state.messages.pop()  # drop the user turn so retrying doesn't duplicate it
+            st.stop()
+
         answer = result["answer"]
         meta = (
             f"route: {result.get('source')} | doc grade: {result.get('overall_verdict')} "
