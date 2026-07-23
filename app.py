@@ -62,18 +62,26 @@ for message in st.session_state.messages:
 question = st.chat_input("Please descripe your issue..")
 
 if question:
+    # Snapshot prior turns before appending the new question, so the graph's
+    # rewrite_question node only sees history that predates this turn.
+    chat_history = [
+        {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
+    ]
+
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            result = graph.invoke({"question": question})
+            result = graph.invoke({"question": question, "chat_history": chat_history})
         answer = result["answer"]
         meta = (
             f"route: {result.get('source')} | doc grade: {result.get('overall_verdict')} "
             f"| web grade: {result.get('web_verdict')} | incident: {bool(result.get('incident'))}"
         )
+        if result.get("standalone_question") and result["standalone_question"] != question:
+            meta = f"resolved to: \"{result['standalone_question']}\" | " + meta
         st.markdown(answer)
         st.caption(meta)
 
