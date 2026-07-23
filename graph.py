@@ -11,7 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 from langgraph.graph import END, StateGraph
 
-from grader import GradeResult, build_grader, grade_document
+from grader import GradeResult, build_batch_grader, build_grader, grade_document, grade_documents
 from incident_feed import check_incident
 from vector_store import build_vector_store
 from web_search import web_search
@@ -104,6 +104,7 @@ def _build_graph():
     vector_store = build_vector_store()
     retriever = vector_store.as_retriever(search_kwargs={"k": 3})
     grader_chain = build_grader()
+    batch_grader_chain = build_batch_grader()
     llm = ChatGroq(model=GROQ_MODEL, temperature=0)
     rewrite_question_chain = REWRITE_QUESTION_PROMPT | llm
     refine_chain = REFINE_PROMPT | llm
@@ -126,10 +127,8 @@ def _build_graph():
         return {"docs": [d.page_content for d in docs]}
 
     def grade(state: CRAGState) -> dict:
-        grades = []
-        for doc in state["docs"]:
-            result: GradeResult = grade_document(grader_chain, state["standalone_question"], doc)
-            grades.append(result.model_dump())
+        results = grade_documents(batch_grader_chain, state["standalone_question"], state["docs"])
+        grades = [r.model_dump() for r in results]
 
         verdicts = [g["verdict"] for g in grades]
         if "correct" in verdicts:
