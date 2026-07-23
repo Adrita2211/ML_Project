@@ -7,3 +7,5 @@ How does SSO login work and how long does it take?
 Why did the dates in my CSV file change after I opened it in Excel — like 03/04/2026 becoming a different date?
 
 Why does my CSV file have an extra blank row at the very end after I open it?
+
+How do I set up SSO login using the Zorblex Identity Vault v9.2 connector?
