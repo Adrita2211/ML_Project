@@ -20,11 +20,24 @@ GROQ_MODEL = "llama-3.1-8b-instant"
 LOG_PATH = os.path.join(os.path.dirname(__file__), "feedback_log.jsonl")
 
 REWRITE_QUESTION_PROMPT = ChatPromptTemplate.from_template(
-    """Given the conversation history and a follow-up question, rewrite the follow-up
-question into a standalone question that contains all context needed to understand it
-without the history (resolve pronouns and implicit references like "it", "that",
-"the same issue"). If the follow-up is already standalone, return it unchanged. Do not
-answer the question — only rewrite it. Return just the rewritten question, no commentary.
+    """Rewrite the follow-up question into a standalone one ONLY if it contains a
+pronoun or implicit reference (e.g. "it", "that", "this issue", "the same problem")
+that depends on the conversation history to resolve. If the follow-up question does
+not contain any such reference — including if it is a complete, self-contained
+question that merely repeats or resembles an earlier one — you MUST return it
+verbatim, character-for-character, with nothing added, removed, or reworded. Never
+add details, scope, or context (e.g. "for my account", "in this case") that are not
+literally present in the follow-up question itself. Do not answer the question —
+only rewrite it or return it unchanged. Return just the question, no commentary.
+
+Examples:
+History: "user: How does SSO work?\\nassistant: ..."
+Follow-up: "how long will that take to fix?"
+Standalone question: "How long will the SSO issue take to fix?"
+
+History: "user: How does SSO work?\\nassistant: ..."
+Follow-up: "How does SSO login work?"
+Standalone question: "How does SSO login work?"
 
 Conversation history:
 {history}
