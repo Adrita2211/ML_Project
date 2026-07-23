@@ -17,6 +17,7 @@ def main():
     graph = build_crag_graph()
     print("Ready. Type a support question (or 'quit' to exit).\n")
 
+    chat_history = []
     while True:
         question = input("You: ").strip()
         if not question:
@@ -24,11 +25,15 @@ def main():
         if question.lower() in {"quit", "exit"}:
             break
 
-        result = graph.invoke({"question": question})
+        result = graph.invoke({"question": question, "chat_history": chat_history})
 
-        print(f"\n[route: {result.get('source')} | doc grade: {result.get('overall_verdict')} "
+        print(f"\n[standalone: {result.get('standalone_question')}]")
+        print(f"[route: {result.get('source')} | doc grade: {result.get('overall_verdict')} "
               f"| web grade: {result.get('web_verdict')} | incident: {bool(result.get('incident'))}]")
         print(f"Assistant: {result['answer']}\n")
+
+        chat_history.append({"role": "user", "content": question})
+        chat_history.append({"role": "assistant", "content": result["answer"]})
 
 
 if __name__ == "__main__":
