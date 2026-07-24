@@ -25,8 +25,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
 
-#GROQ_MODEL = "llama-3.3-70b-versatile"
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = "llama-3.3-70b-versatile"
+#GROQ_MODEL = "llama-3.1-8b-instant"
 GRADE_PROMPT = ChatPromptTemplate.from_template(
     """You are a strict relevance grader for a customer support retrieval system.
 
