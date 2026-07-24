@@ -26,12 +26,8 @@ load_dotenv()
 from graph import build_crag_graph  # noqa: E402  (must load env vars first)
 
 st.set_page_config(page_title="CRAG Incident-Aware Support", page_icon="🛠️")
-st.title("🛠️ CRAG Incident-Aware Support")
-st.caption(
-    "Corrective RAG demo: docs are graded for relevance, an active-incident "
-    "feed is checked in parallel, and low-quality retrieval falls back to "
-    "live web search before escalating to a human."
-)
+st.title("🛠️ Incident-Aware Support Assistant")
+st.caption("Smart L1/L2 support automation using Corrective RAG (CRAG). Evaluates context quality in real time and integrates live system status feeds.")
 
 missing = [k for k in ("GROQ_API_KEY", "TAVILY_API_KEY") if not os.environ.get(k)]
 if missing:
