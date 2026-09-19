@@ -1,0 +1,9 @@
+snapshot_id,snapshot_date,payer_id,plan_id,product_id,benefit_type,actual_tier,actual_status,pa_flag,st_flag,ql_flag,coverage_flag,effective_date,source_record_id,source_freshness_days,source_system
+SNP-001,2026-06-30,PAY-001,PLN-1001,PRD-001,Pharmacy,2,Preferred,Y,N,Y,Y,2026-06-01,SRC-10001,1,Synthetic MMIT
+SNP-002,2026-07-31,PAY-001,PLN-1001,PRD-001,Pharmacy,2,Preferred,Y,N,Y,Y,2026-07-01,SRC-10002,1,Synthetic MMIT
+SNP-003,2026-08-31,PAY-001,PLN-1001,PRD-001,Pharmacy,3,Non-preferred,Y,N,Y,Y,2026-08-01,SRC-10003,1,Synthetic MMIT
+SNP-004,2026-08-31,PAY-001,PLN-1001,PRD-002,Pharmacy,2,Preferred,Y,N,Y,Y,2026-08-01,SRC-10004,1,Synthetic MMIT
+SNP-005,2026-08-31,PAY-002,PLN-2001,PRD-001,Pharmacy,2,Preferred,Y,Y,N,Y,2026-08-01,SRC-20001,2,Synthetic MMIT
+SNP-006,2026-08-31,PAY-003,PLN-3001,PRD-001,Pharmacy,3,Covered,Y,Y,Y,Y,2026-08-01,SRC-30001,3,Synthetic MMIT
+SNP-007,2026-08-31,PAY-004,PLN-4001,PRD-001,Pharmacy,,Not covered,,,,N,2026-08-01,SRC-40001,1,Synthetic MMIT
+SNP-008,2026-08-31,PAY-005,PLN-5001,PRD-001,Pharmacy,2,Preferred,Y,N,N,Y,2026-05-01,SRC-50001,125,Synthetic MMIT

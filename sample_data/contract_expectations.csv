@@ -1,0 +1,5 @@
+contract_id,payer_id,plan_id,product_id,expected_tier,expected_status,pa_allowed,st_allowed,ql_allowed,ql_limit,comparator_product_id,parity_required,effective_from,effective_to,grace_days,clause_reference
+CTR-1001,PAY-001,PLN-1001,PRD-001,2,Preferred,Y,N,Y,1 package / 28 days,PRD-002,Y,2026-01-01,2026-12-31,10,Sections 2.1-2.4
+CTR-1002,PAY-002,PLN-2001,PRD-001,2,Co-preferred,Y,N,N,,PRD-002,Y,2026-01-01,2026-12-31,10,Demo clause set B
+CTR-1003,PAY-003,PLN-3001,PRD-001,3,Covered,Y,Y,Y,2 packages / 28 days,,N,2026-01-01,2026-12-31,10,Demo clause set C
+CTR-1004,PAY-004,PLN-4001,PRD-001,2,Preferred,N,N,N,,PRD-003,Y,2026-04-01,2027-03-31,10,Demo clause set D

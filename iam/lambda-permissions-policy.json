@@ -1,0 +1,125 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:058264386876:*"
+    },
+    {
+      "Sid": "ReadUploadedPdfs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::payer-formulary-uploads-313/*"
+    },
+    {
+      "Sid": "TextractJobs",
+      "Effect": "Allow",
+      "Action": [
+        "textract:StartDocumentTextDetection",
+        "textract:GetDocumentTextDetection"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassTextractRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::058264386876:role/textract-sns-publish-role"
+    },
+    {
+      "Sid": "DynamoDbTables",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:058264386876:table/TextractJobTokens",
+        "arn:aws:dynamodb:us-east-1:058264386876:table/FormularyAgreementSummaries",
+        "arn:aws:dynamodb:us-east-1:058264386876:table/FormularyMarketSnapshots",
+        "arn:aws:dynamodb:us-east-1:058264386876:table/FormularyDeviations"
+      ]
+    },
+    {
+      "Sid": "DynamoDbContractExpectationsIndex",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:Query"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:058264386876:table/FormularyAgreementSummaries/index/PayerPlanProductIndex"
+    },
+    {
+      "Sid": "DynamoDbStreamsRead",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DescribeStream",
+        "dynamodb:GetRecords",
+        "dynamodb:GetShardIterator",
+        "dynamodb:ListStreams"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:058264386876:table/FormularyAgreementSummaries/stream/*",
+        "arn:aws:dynamodb:us-east-1:058264386876:table/FormularyMarketSnapshots/stream/*"
+      ]
+    },
+    {
+      "Sid": "ComparisonQueueAccess",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes"
+      ],
+      "Resource": "arn:aws:sqs:us-east-1:058264386876:formulary-comparison-queue"
+    },
+    {
+      "Sid": "BedrockInvoke",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
+      ]
+    },
+    {
+      "Sid": "KnowledgeBaseVectors",
+      "Effect": "Allow",
+      "Action": [
+        "s3vectors:PutVectors",
+        "s3vectors:QueryVectors",
+        "s3vectors:GetVectors"
+      ],
+      "Resource": "arn:aws:s3vectors:us-east-1:058264386876:bucket/payer-formulary-vectors-313/index/formulary-knowledge"
+    },
+    {
+      "Sid": "StepFunctionsCallback",
+      "Effect": "Allow",
+      "Action": [
+        "states:SendTaskSuccess",
+        "states:SendTaskFailure"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PublishSummaryReady",
+      "Effect": "Allow",
+      "Action": [
+        "sns:Publish"
+      ],
+      "Resource": "arn:aws:sns:us-east-1:058264386876:document-summary-ready"
+    }
+  ]
+}

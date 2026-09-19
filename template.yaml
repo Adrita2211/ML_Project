@@ -1,0 +1,826 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Payer formulary deviation agent (Textract, Step Functions, Bedrock AgentCore agents)
+
+Parameters:
+  UploadsBucketName:
+    Type: String
+    Default: payer-formulary-uploads-313
+  JobTokensTableName:
+    Type: String
+    Default: TextractJobTokens
+  SummariesTableName:
+    # Despite the name, items here are Contract_Expectations rows - one per
+    # (contractId, payerId, planId, productId), stored under the table's
+    # existing "documentId" partition key with a composite value - not one
+    # blob per contract. Kept the original table/param name to avoid a
+    # migration on the deployed stack; rename on a future clean redeploy.
+    Type: String
+    Default: FormularyAgreementSummaries
+  ContractExpectationsIndexName:
+    # GSI on SummariesTableName keyed by "payerPlanProductKey", so the
+    # comparison worker can look up a contract row given only a
+    # payer/plan/product key from a market-data snapshot. Must be added
+    # manually to the existing table - see README "Manual steps" section.
+    Type: String
+    Default: PayerPlanProductIndex
+  ContractExpectationsStreamArn:
+    # DynamoDB Streams ARN for SummariesTableName. Streams must be enabled
+    # manually on the existing table first (see README) - this has no
+    # default because the ARN is only known after that's done; pass it via
+    # `sam deploy --guided` or --parameter-overrides.
+    Type: String
+  MarketSnapshotsTableName:
+    Type: String
+    Default: FormularyMarketSnapshots
+  DeviationOutputTableName:
+    Type: String
+    Default: FormularyDeviations
+  ComparisonQueueName:
+    Type: String
+    Default: formulary-comparison-queue
+  StaleSourceDays:
+    # Market data older than this is routed to the data steward (Sec 3.4)
+    # instead of being compared. The agreement gives no number; 30 is a default.
+    Type: Number
+    Default: 30
+  VectorBucketName:
+    # S3 Vectors bucket names: 3-63 chars, lowercase letters, numbers, hyphens.
+    Type: String
+    Default: payer-formulary-vectors-313
+  VectorIndexName:
+    Type: String
+    Default: formulary-knowledge
+  EmbeddingModelId:
+    Type: String
+    Default: amazon.titan-embed-text-v2:0
+  TextractCompleteTopicArn:
+    Type: String
+    Default: arn:aws:sns:us-east-1:058264386876:textract-job-complete
+  SummaryReadyTopicArn:
+    Type: String
+    Default: arn:aws:sns:us-east-1:058264386876:document-summary-ready
+  LambdaExecutionRoleArn:
+    Type: String
+    Default: arn:aws:iam::058264386876:role/lambda-execution-role
+  TextractSnsPublishRoleArn:
+    Type: String
+    Default: arn:aws:iam::058264386876:role/textract-sns-publish-role
+  EventBridgeSfnRoleArn:
+    Type: String
+    Default: arn:aws:iam::058264386876:role/eventbridge-sfn-role
+  ContractParserModelId:
+    # Model behind the Contract Parser agent. Extraction is the one place a
+    # weak reading corrupts everything downstream (the ids it reads are the join
+    # keys), so this defaults to a stronger model than the case agents use.
+    Type: String
+    Default: amazon.nova-pro-v1:0
+  HarnessModelId:
+    # Model the AgentCore harness runs. Nova Lite is what AWS's own Step
+    # Functions sample uses, and is the cheapest option. If you switch to a
+    # cross-region inference profile id (us.* / global.*), widen the Bedrock
+    # resource ARNs on HarnessExecutionRole to match.
+    Type: String
+    Default: amazon.nova-lite-v1:0
+  ApprovalEmail:
+    # Where approval requests are emailed. Leave empty to create the topic
+    # without a subscription (add one later). AWS emails a confirmation link.
+    Type: String
+    Default: ""
+
+Conditions:
+  HasApprovalEmail: !Not [!Equals [!Ref ApprovalEmail, ""]]
+
+Resources:
+
+  StartTextractJobFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: start_textract_job
+      CodeUri: lambdas/
+      Handler: start_textract_job.handler
+      Runtime: python3.11
+      Timeout: 30
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          JOB_TOKENS_TABLE: !Ref JobTokensTableName
+          TEXTRACT_SNS_TOPIC_ARN: !Ref TextractCompleteTopicArn
+          TEXTRACT_ROLE_ARN: !Ref TextractSnsPublishRoleArn
+
+  ResumeWorkflowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: resume_workflow
+      CodeUri: lambdas/
+      Handler: resume_workflow.handler
+      Runtime: python3.11
+      Timeout: 60
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          JOB_TOKENS_TABLE: !Ref JobTokensTableName
+      Events:
+        TextractCompleteTrigger:
+          Type: SNS
+          Properties:
+            Topic: !Ref TextractCompleteTopicArn
+
+  ParseExtractionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: parse_extraction
+      CodeUri: lambdas/
+      Handler: parse_extraction.handler
+      Runtime: python3.11
+      Timeout: 30  # pure logic: no AWS permissions at all
+
+  SaveAndNotifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: save_and_notify
+      CodeUri: lambdas/
+      Handler: save_and_notify.handler
+      Runtime: python3.11
+      Timeout: 30
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          SUMMARIES_TABLE: !Ref SummariesTableName
+          SUMMARY_READY_TOPIC_ARN: !Ref SummaryReadyTopicArn
+
+  IndexContractClausesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: index_contract_clauses
+      CodeUri: lambdas/
+      Handler: index_contract_clauses.handler
+      Runtime: python3.11
+      Timeout: 120  # one embedding call per clause chunk (~25 for the sample agreement)
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          JOB_TOKENS_TABLE: !Ref JobTokensTableName
+          VECTOR_BUCKET_NAME: !Ref VectorBucketName
+          VECTOR_INDEX_NAME: !Ref VectorIndexName
+          EMBEDDING_MODEL_ID: !Ref EmbeddingModelId
+
+  PdfSummarizerStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: pdf-summarizer
+      # Type is left unset on purpose: it defaults to STANDARD, and the machine already deployed has no explicit
+      # type. Writing one makes CloudFormation replace the machine, which cannot work for a fixed name.
+      DefinitionUri: statemachine/pdf_summarizer.asl.json
+      DefinitionSubstitutions:
+        ContractParserHarnessArn: !GetAtt ContractParserHarness.Arn
+        StartTextractJobFunctionArn: !GetAtt StartTextractJobFunction.Arn
+        ParseExtractionFunctionArn: !GetAtt ParseExtractionFunction.Arn
+        SaveAndNotifyFunctionArn: !GetAtt SaveAndNotifyFunction.Arn
+        IndexContractClausesFunctionArn: !GetAtt IndexContractClausesFunction.Arn
+      Tracing:
+        Enabled: true
+      Policies:
+        - LambdaInvokePolicy: {FunctionName: !Ref StartTextractJobFunction}
+        - LambdaInvokePolicy: {FunctionName: !Ref ParseExtractionFunction}
+        - LambdaInvokePolicy: {FunctionName: !Ref SaveAndNotifyFunction}
+        - LambdaInvokePolicy: {FunctionName: !Ref IndexContractClausesFunction}
+        - Statement:
+            # Both actions, on the harness ARN only. InvokeAgentRuntimeCommand
+            # (runs commands with no model in between) is deliberately not granted.
+            - Effect: Allow
+              Action: [bedrock-agentcore:InvokeHarness, bedrock-agentcore:InvokeAgentRuntime]
+              Resource: !GetAtt ContractParserHarness.Arn
+
+  NewFormularyPdfUploadedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: new-formulary-pdf-uploaded
+      EventPattern:
+        source: ["aws.s3"]
+        detail-type: ["Object Created"]
+        detail:
+          bucket:
+            name: [!Ref UploadsBucketName]
+          object:
+            key:
+              - suffix: ".pdf"
+      Targets:
+        - Id: PdfSummarizerStateMachineTarget
+          Arn: !GetAtt PdfSummarizerStateMachine.Arn
+          RoleArn: !Ref EventBridgeSfnRoleArn
+
+  # --- Comparison engine (deviation detection) ---------------------------
+  # "5 comparison, scalable" layer: DynamoDB Streams on both source tables
+  # feed a single forwarder Lambda, which pushes just the changed key onto
+  # an SQS queue. SQS absorbs bursts and lets the worker's concurrency be
+  # capped independently of write volume - the "buffer + backpressure"
+  # piece that was missing from the first pass.
+
+  MarketSnapshotsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref MarketSnapshotsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: payerPlanProductKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: payerPlanProductKey
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  DeviationOutputTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DeviationOutputTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: payerPlanProductKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: payerPlanProductKey
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  ComparisonDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ComparisonQueueName}-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days - long enough to investigate and redrive manually
+
+  ComparisonQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref ComparisonQueueName
+      VisibilityTimeout: 60  # >= CompareDeviationFunction timeout, per SQS/Lambda guidance
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ComparisonDLQ.Arn
+        maxReceiveCount: 3
+
+  ForwardStreamToQueueFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: forward_stream_to_queue
+      CodeUri: lambdas/
+      Handler: forward_stream_to_queue.handler
+      Runtime: python3.11
+      Timeout: 30
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          COMPARISON_QUEUE_URL: !Ref ComparisonQueue
+      Events:
+        MarketSnapshotsStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt MarketSnapshotsTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+        ContractExpectationsStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !Ref ContractExpectationsStreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+
+  CompareDeviationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: compare_deviation
+      CodeUri: lambdas/
+      Handler: compare_deviation.handler
+      Runtime: python3.11
+      Timeout: 30
+      ReservedConcurrentExecutions: 5  # MVP-scale cap; raise once volume justifies it
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          MARKET_SNAPSHOTS_TABLE: !Ref MarketSnapshotsTableName
+          CONTRACT_EXPECTATIONS_TABLE: !Ref SummariesTableName
+          CONTRACT_EXPECTATIONS_INDEX: !Ref ContractExpectationsIndexName
+          DEVIATION_OUTPUT_TABLE: !Ref DeviationOutputTableName
+          COMPARISON_QUEUE_URL: !Ref ComparisonQueue
+          STALE_SOURCE_DAYS: !Ref StaleSourceDays
+      Events:
+        ComparisonQueueTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ComparisonQueue.Arn
+            BatchSize: 10
+
+  ReasoningDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ComparisonQueueName}-reasoning-dlq"
+      MessageRetentionPeriod: 1209600
+
+  # ==========================================================================
+  # Deviation case workflow: Step Functions orchestrating Bedrock AgentCore
+  # agents. Agents PROPOSE; deterministic Lambdas claim, validate and save;
+  # a human approves via a task-token wait. No agent state writes anywhere.
+  #
+  # The new Lambdas below get least-privilege roles generated from their
+  # Policies blocks, so this part needs no manual IAM step (unlike the older
+  # functions that share the hand-made lambda-execution-role).
+  # ==========================================================================
+
+  HarnessExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Assumed by the AgentCore harness while it runs an agent session
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: bedrock-agentcore.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: harness-runtime
+          # Adapted from AWS's sample execution role for a public-network
+          # harness, keeping only what a tool-less, memory-less text agent
+          # needs: model invocation, image pull, tracing and logs.
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: BedrockModelInvocation
+                Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource:
+                  - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/${HarnessModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/${ContractParserModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:*
+              - Sid: EcrPublicImagePull
+                Effect: Allow
+                Action: [ecr-public:GetAuthorizationToken, sts:GetServiceBearerToken]
+                Resource: "*"
+              - Sid: XRayTracing
+                Effect: Allow
+                Action: [xray:PutTraceSegments, xray:PutTelemetryRecords, xray:GetSamplingRules, xray:GetSamplingTargets]
+                Resource: "*"
+              - Sid: LogGroup
+                Effect: Allow
+                Action: [logs:CreateLogGroup, logs:DescribeLogStreams]
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/*
+              - Sid: DescribeLogGroups
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+              - Sid: LogStreams
+                Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*
+              - Sid: PutResourcePolicyForLogDelivery
+                Effect: Allow
+                Action: logs:PutResourcePolicy
+                Resource: "*"
+              - Sid: Metrics
+                Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringEquals: {"cloudwatch:namespace": bedrock-agentcore}
+              - Sid: WorkloadIdentity
+                Effect: Allow
+                Action: [bedrock-agentcore:GetWorkloadAccessToken, bedrock-agentcore:GetWorkloadAccessTokenForJWT]
+                Resource:
+                  - !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default
+                  - !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default/workload-identity/harness_DeviationCaseAgent-*
+                  - !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default/workload-identity/harness_ContractParserAgent-*
+
+  # The Contract Parser agent. Its system prompt is FIXED for this agent, so it is
+  # the harness default and the workflow state does not override it. Whatever it
+  # returns is only a proposal: parse_extraction validates it before anything is saved.
+  ContractParserHarness:
+    Type: AWS::BedrockAgentCore::Harness
+    Properties:
+      HarnessName: ContractParserAgent
+      ExecutionRoleArn: !GetAtt HarnessExecutionRole.Arn
+      Model:
+        BedrockModelConfig:
+          ModelId: !Ref ContractParserModelId
+          Temperature: 0
+          MaxTokens: 4096  # the structured output for a multi-product agreement is long
+      SystemPrompt:
+        - Text: |
+            You are a pharmacy contracts analyst. You will be given the raw OCR'd text of a payer formulary access agreement between a health plan (Payer) and a drug manufacturer.
+
+            Extract the following fields and return ONLY a single valid JSON object (no markdown fences, no commentary) with this exact shape:
+
+            {
+              "contract_id": string or null,
+              "payer_id": string or null,
+              "payer_name": string or null,
+              "plan_id": string or null,
+              "plan_name": string or null,
+              "manufacturer_name": string or null,
+              "effective_from": "YYYY-MM-DD" or null,
+              "effective_to": "YYYY-MM-DD" or null,
+              "implementation_grace_days": integer or null,
+              "coverage_terms": [
+                {
+                  "product_id": string or null,
+                  "product_name": string,
+                  "strength": string or null,
+                  "expected_tier": integer or null,
+                  "expected_status": string or null,
+                  "pa_allowed": "Y" or "N" or null,
+                  "st_allowed": "Y" or "N" or null,
+                  "ql_allowed": "Y" or "N" or null,
+                  "ql_limit": string or null,
+                  "comparator_product_id": string or null,
+                  "comparator_product_name": string or null,
+                  "parity_required": "Y" or "N" or null,
+                  "clause_reference": string or null
+                }
+              ],
+              "rebate_terms": [
+                {
+                  "tier": string or null,
+                  "base_rebate_pct": string or null,
+                  "performance_rebate_pct": string or null,
+                  "performance_condition": string or null
+                }
+              ],
+              "key_dates_and_amounts": [string],
+              "executive_summary": string
+            }
+
+            Field notes:
+            - "contract_id", "payer_id", "plan_id", "product_id" are business identifiers if the document states them explicitly (e.g. an agreement number, payer code, plan code, NDC/product code). Use null if the document does not state one - do not invent an identifier.
+            - "effective_from" and "effective_to" are the agreement term as ISO dates: convert "January 1, 2026" to "2026-01-01". They are compared as text downstream, so any other format breaks the comparison.
+            - "implementation_grace_days" is the number of days after an approved formulary change during which a discrepancy may be treated as administrative lag while the payer completes system propagation (an "implementation grace period" clause). Null if the agreement has no such clause.
+            - "expected_tier" is the formulary tier as an integer (e.g. 2), not the word "Preferred".
+            - "expected_status" is the plain-language placement (e.g. "Preferred", "Non-preferred", "Covered", "Not covered").
+            - "pa_allowed" / "st_allowed" / "ql_allowed" answer "does the payer require this utilization management restriction on this product": "Y" if required, "N" if explicitly not required, null if not stated.
+            - "comparator_product_id"/"comparator_product_name" and "parity_required" only apply if the agreement includes a parity/most-favored-formulary clause naming a specific comparator drug.
+            - "clause_reference" is the section/exhibit number the coverage terms came from (e.g. "Section 3.2" or "Exhibit B"), for audit traceability. Use null if the document has no section numbering.
+            - One entry in "coverage_terms" per distinct product (and per plan, if the agreement covers multiple plans with different terms for the same product - repeat the product with a different plan_id/plan_name context inferred from surrounding text).
+
+            If a field cannot be found in the text, use null (or an empty array for list fields). Do not invent values that are not present in the text. Be concise and factual.
+      MaxIterations: 3
+      MaxTokens: 6000
+      TimeoutSeconds: 300
+      # Text in, JSON out: no tools (see DeviationCaseHarness for why this names a non-existent server).
+      AllowedTools:
+        - "@none/no-tools"
+      Memory:
+        Disabled: {}
+
+  DeviationCaseHarness:
+    Type: AWS::BedrockAgentCore::Harness
+    Properties:
+      HarnessName: DeviationCaseAgent
+      ExecutionRoleArn: !GetAtt HarnessExecutionRole.Arn
+      Model:
+        BedrockModelConfig:
+          ModelId: !Ref HarnessModelId
+          Temperature: 0
+          MaxTokens: 1500
+      # Default only. Every state in the workflow overrides this with its own
+      # role-specific prompt (analyst, per-persona planner, verifier).
+      SystemPrompt:
+        - Text: Respond with exactly one JSON object and nothing else.
+      # Hard caps so one runaway agent cannot burn budget (AWS docs: "Control cost with limits").
+      MaxIterations: 3
+      MaxTokens: 3000
+      TimeoutSeconds: 120
+      # These are text-in / JSON-out steps: no tools. By default every session
+      # gets a shell and file tool (about 900 extra input tokens per model
+      # call, and a shell the agent has no need for). allowedTools needs at
+      # least one entry, so this names a tool server that does not exist:
+      # nothing matches and nothing is exposed. Verify on the first run that
+      # the harness reports no tool use.
+      AllowedTools:
+        - "@none/no-tools"
+      # Managed memory is on by default and bills; each step is a fresh
+      # single-shot session, so it would store nothing useful.
+      Memory:
+        Disabled: {}
+
+  CaseApprovalTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Formulary deviation approvals
+
+  CaseApprovalSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasApprovalEmail
+    Properties:
+      TopicArn: !Ref CaseApprovalTopic
+      Protocol: email
+      Endpoint: !Ref ApprovalEmail
+
+  LoadCaseContextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: load_case_context
+      CodeUri: lambdas/
+      Handler: load_case_context.handler
+      Runtime: python3.11
+      Timeout: 60  # claim + 2 embeddings + 2 vector queries
+      Environment:
+        Variables:
+          DEVIATION_OUTPUT_TABLE: !Ref DeviationOutputTable
+          VECTOR_BUCKET_NAME: !Ref VectorBucketName
+          VECTOR_INDEX_NAME: !Ref VectorIndexName
+          EMBEDDING_MODEL_ID: !Ref EmbeddingModelId
+      Policies:
+        - DynamoDBCrudPolicy: {TableName: !Ref DeviationOutputTable}
+        - Statement:
+            - Effect: Allow
+              Action: [s3vectors:QueryVectors, s3vectors:GetVectors]
+              Resource: !Sub arn:${AWS::Partition}:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${EmbeddingModelId}
+
+  ValidateProposalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: validate_proposal
+      CodeUri: lambdas/
+      Handler: validate_proposal.handler
+      Runtime: python3.11
+      Timeout: 30  # pure logic: no AWS permissions at all
+
+  SaveCaseResultFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: save_case_result
+      CodeUri: lambdas/
+      Handler: save_case_result.handler
+      Runtime: python3.11
+      Timeout: 30
+      Environment:
+        Variables:
+          DEVIATION_OUTPUT_TABLE: !Ref DeviationOutputTable
+      Policies:
+        - DynamoDBCrudPolicy: {TableName: !Ref DeviationOutputTable}
+
+  RequestApprovalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: request_approval
+      CodeUri: lambdas/
+      Handler: request_approval.handler
+      Runtime: python3.11
+      Timeout: 30
+      Environment:
+        Variables:
+          DEVIATION_OUTPUT_TABLE: !Ref DeviationOutputTable
+          APPROVAL_TOPIC_ARN: !Ref CaseApprovalTopic
+      Policies:
+        - DynamoDBCrudPolicy: {TableName: !Ref DeviationOutputTable}
+        - SNSPublishMessagePolicy: {TopicName: !GetAtt CaseApprovalTopic.TopicName}
+        - Statement:
+            # Only to release a wait whose finding was superseded; the state
+            # machine's own token is the only one this can be handed.
+            - Effect: Allow
+              Action: states:SendTaskSuccess
+              Resource: "*"
+
+  RecordDecisionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: record_decision
+      CodeUri: lambdas/
+      Handler: record_decision.handler
+      Runtime: python3.11
+      Timeout: 30
+      Environment:
+        Variables:
+          DEVIATION_OUTPUT_TABLE: !Ref DeviationOutputTable
+      Policies:
+        - DynamoDBCrudPolicy: {TableName: !Ref DeviationOutputTable}
+
+  DeviationCaseStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: deviation-case-workflow
+      Type: STANDARD  # needed for the 7-day approval wait; Express cannot wait for a token
+      DefinitionUri: statemachine/deviation_case.asl.json
+      DefinitionSubstitutions:
+        HarnessArn: !GetAtt DeviationCaseHarness.Arn
+        LoadCaseContextFunctionArn: !GetAtt LoadCaseContextFunction.Arn
+        ValidateProposalFunctionArn: !GetAtt ValidateProposalFunction.Arn
+        SaveCaseResultFunctionArn: !GetAtt SaveCaseResultFunction.Arn
+        RequestApprovalFunctionArn: !GetAtt RequestApprovalFunction.Arn
+        RecordDecisionFunctionArn: !GetAtt RecordDecisionFunction.Arn
+      Tracing:
+        Enabled: true
+      Policies:
+        - LambdaInvokePolicy: {FunctionName: !Ref LoadCaseContextFunction}
+        - LambdaInvokePolicy: {FunctionName: !Ref ValidateProposalFunction}
+        - LambdaInvokePolicy: {FunctionName: !Ref SaveCaseResultFunction}
+        - LambdaInvokePolicy: {FunctionName: !Ref RequestApprovalFunction}
+        - LambdaInvokePolicy: {FunctionName: !Ref RecordDecisionFunction}
+        - Statement:
+            # Per AWS docs, InvokeHarness needs both actions, on the harness ARN only.
+            # Deliberately NOT granted: InvokeAgentRuntimeCommand (runs commands with no LLM in between).
+            - Effect: Allow
+              Action: [bedrock-agentcore:InvokeHarness, bedrock-agentcore:InvokeAgentRuntime]
+              Resource: !GetAtt DeviationCaseHarness.Arn
+
+  CaseTriggerPipeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: pipes.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: {"aws:SourceAccount": !Ref "AWS::AccountId"}
+      Policies:
+        - PolicyName: read-stream-start-case
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:DescribeStream, dynamodb:GetRecords, dynamodb:GetShardIterator, dynamodb:ListStreams]
+                Resource: !GetAtt DeviationOutputTable.StreamArn
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Ref DeviationCaseStateMachine
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt ReasoningDLQ.Arn
+
+  # Deviation_Output stream -> state machine, with no Lambda in between.
+  # The filter is the cost control: compliant rows never start a workflow, and
+  # `reasoningStartedAt` must be ABSENT, so the workflow's own claim and
+  # result writes to the same row cannot start another one.
+  CaseTriggerPipe:
+    Type: AWS::Pipes::Pipe
+    Properties:
+      Name: deviation-case-trigger
+      RoleArn: !GetAtt CaseTriggerPipeRole.Arn
+      Source: !GetAtt DeviationOutputTable.StreamArn
+      SourceParameters:
+        DynamoDBStreamParameters:
+          StartingPosition: LATEST
+          BatchSize: 1
+          MaximumRetryAttempts: 2
+          MaximumRecordAgeInSeconds: 3600
+          DeadLetterConfig:
+            Arn: !GetAtt ReasoningDLQ.Arn
+        FilterCriteria:
+          Filters:
+            - Pattern: '{"eventName": ["INSERT", "MODIFY"], "dynamodb": {"NewImage": {"status": {"S": ["Potential deviation - review required", "Route to data steward"]}, "reasoningStartedAt": {"N": [{"exists": false}]}}}}'
+      Target: !Ref DeviationCaseStateMachine
+      TargetParameters:
+        StepFunctionStateMachineParameters:
+          InvocationType: FIRE_AND_FORGET
+
+  # Knowledge base: playbook rows + contract clause chunks, one index,
+  # separated by the filterable "docType" key. Text fields are non-filterable
+  # so they can be long; everything the retrieval filters on stays filterable.
+  VectorBucket:
+    Type: AWS::S3Vectors::VectorBucket
+    Properties:
+      VectorBucketName: !Ref VectorBucketName
+
+  VectorIndex:
+    Type: AWS::S3Vectors::Index
+    DependsOn: VectorBucket
+    Properties:
+      VectorBucketName: !Ref VectorBucketName
+      IndexName: !Ref VectorIndexName
+      DataType: float32
+      Dimension: 1024  # Titan Text Embeddings v2 default; must match EMBEDDING_DIMENSION
+      DistanceMetric: cosine
+      MetadataConfiguration:
+        NonFilterableMetadataKeys:
+          - text
+          - title
+          - sourceKey
+          - triggerCondition
+          - nextBestAction
+          - requiredEvidence
+          - doNotDo
+
+  IngestPlaybookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ingest_playbook
+      CodeUri: lambdas/
+      Handler: ingest_playbook.handler
+      Runtime: python3.11
+      Timeout: 60
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          VECTOR_BUCKET_NAME: !Ref VectorBucketName
+          VECTOR_INDEX_NAME: !Ref VectorIndexName
+          EMBEDDING_MODEL_ID: !Ref EmbeddingModelId
+
+  IngestPlaybookInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref IngestPlaybookFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt NewPlaybookUploadedRule.Arn
+
+  NewPlaybookUploadedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: new-playbook-uploaded
+      EventPattern:
+        source: ["aws.s3"]
+        detail-type: ["Object Created"]
+        detail:
+          bucket:
+            name: [!Ref UploadsBucketName]
+          object:
+            key:
+              - prefix: "playbook/"
+      Targets:
+        - Id: IngestPlaybookTarget
+          Arn: !GetAtt IngestPlaybookFunction.Arn
+
+  IngestMarketSnapshotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ingest_market_snapshot
+      CodeUri: lambdas/
+      Handler: ingest_market_snapshot.handler
+      Runtime: python3.11
+      Timeout: 60
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          MARKET_SNAPSHOTS_TABLE: !Ref MarketSnapshotsTableName
+
+  IngestMarketSnapshotInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref IngestMarketSnapshotFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt NewMarketDataUploadedRule.Arn
+
+  NewMarketDataUploadedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: new-market-data-uploaded
+      EventPattern:
+        source: ["aws.s3"]
+        detail-type: ["Object Created"]
+        detail:
+          bucket:
+            name: [!Ref UploadsBucketName]
+          object:
+            key:
+              # Prefix, not ".csv" suffix: accepts .xlsx too, and keeps market
+              # data apart from playbook uploads (playbook/) and contract PDFs.
+              - prefix: "market-data/"
+      Targets:
+        - Id: IngestMarketSnapshotTarget
+          Arn: !GetAtt IngestMarketSnapshotFunction.Arn
+
+Outputs:
+  StateMachineArn:
+    Value: !GetAtt PdfSummarizerStateMachine.Arn
+  StartTextractJobFunctionArn:
+    Value: !GetAtt StartTextractJobFunction.Arn
+  ResumeWorkflowFunctionArn:
+    Value: !GetAtt ResumeWorkflowFunction.Arn
+  ParseExtractionFunctionArn:
+    Value: !GetAtt ParseExtractionFunction.Arn
+  ContractParserHarnessArn:
+    Value: !GetAtt ContractParserHarness.Arn
+  SaveAndNotifyFunctionArn:
+    Value: !GetAtt SaveAndNotifyFunction.Arn
+  MarketSnapshotsTableName:
+    Value: !Ref MarketSnapshotsTable
+  DeviationOutputTableName:
+    Value: !Ref DeviationOutputTable
+  ComparisonQueueUrl:
+    Value: !Ref ComparisonQueue
+  ComparisonQueueArn:
+    Value: !GetAtt ComparisonQueue.Arn
+  IngestMarketSnapshotFunctionArn:
+    Value: !GetAtt IngestMarketSnapshotFunction.Arn
+  CompareDeviationFunctionArn:
+    Value: !GetAtt CompareDeviationFunction.Arn
+  DeviationCaseStateMachineArn:
+    Value: !Ref DeviationCaseStateMachine
+  DeviationCaseHarnessArn:
+    Value: !GetAtt DeviationCaseHarness.Arn
+  CaseApprovalTopicArn:
+    Value: !Ref CaseApprovalTopic
+  IndexContractClausesFunctionArn:
+    Value: !GetAtt IndexContractClausesFunction.Arn
+  IngestPlaybookFunctionArn:
+    Value: !GetAtt IngestPlaybookFunction.Arn
+  VectorBucketArn:
+    Value: !GetAtt VectorBucket.VectorBucketArn
+  VectorIndexArn:
+    Value: !GetAtt VectorIndex.IndexArn
+  ReasoningDLQUrl:
+    Value: !Ref ReasoningDLQ

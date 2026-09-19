@@ -1,0 +1,999 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Payer formulary deviation agent (Textract, Step Functions, Bedrock AgentCore
+  agents)
+Parameters:
+  UploadsBucketName:
+    Type: String
+    Default: payer-formulary-uploads-313
+  JobTokensTableName:
+    Type: String
+    Default: TextractJobTokens
+  SummariesTableName:
+    Type: String
+    Default: FormularyAgreementSummaries
+  ContractExpectationsIndexName:
+    Type: String
+    Default: PayerPlanProductIndex
+  ContractExpectationsStreamArn:
+    Type: String
+  MarketSnapshotsTableName:
+    Type: String
+    Default: FormularyMarketSnapshots
+  DeviationOutputTableName:
+    Type: String
+    Default: FormularyDeviations
+  ComparisonQueueName:
+    Type: String
+    Default: formulary-comparison-queue
+  StaleSourceDays:
+    Type: Number
+    Default: 30
+  VectorBucketName:
+    Type: String
+    Default: payer-formulary-vectors-313
+  VectorIndexName:
+    Type: String
+    Default: formulary-knowledge
+  EmbeddingModelId:
+    Type: String
+    Default: amazon.titan-embed-text-v2:0
+  TextractCompleteTopicArn:
+    Type: String
+    Default: arn:aws:sns:us-east-1:058264386876:textract-job-complete
+  SummaryReadyTopicArn:
+    Type: String
+    Default: arn:aws:sns:us-east-1:058264386876:document-summary-ready
+  LambdaExecutionRoleArn:
+    Type: String
+    Default: arn:aws:iam::058264386876:role/lambda-execution-role
+  TextractSnsPublishRoleArn:
+    Type: String
+    Default: arn:aws:iam::058264386876:role/textract-sns-publish-role
+  EventBridgeSfnRoleArn:
+    Type: String
+    Default: arn:aws:iam::058264386876:role/eventbridge-sfn-role
+  ContractParserModelId:
+    Type: String
+    Default: amazon.nova-pro-v1:0
+  HarnessModelId:
+    Type: String
+    Default: amazon.nova-lite-v1:0
+  ApprovalEmail:
+    Type: String
+    Default: ''
+Conditions:
+  HasApprovalEmail:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: ApprovalEmail
+      - ''
+Resources:
+  StartTextractJobFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: start_textract_job
+      CodeUri: StartTextractJobFunction
+      Handler: start_textract_job.handler
+      Runtime: python3.11
+      Timeout: 30
+      Role:
+        Ref: LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          JOB_TOKENS_TABLE:
+            Ref: JobTokensTableName
+          TEXTRACT_SNS_TOPIC_ARN:
+            Ref: TextractCompleteTopicArn
+          TEXTRACT_ROLE_ARN:
+            Ref: TextractSnsPublishRoleArn
+    Metadata:
+      SamResourceId: StartTextractJobFunction
+  ResumeWorkflowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: resume_workflow
+      CodeUri: ResumeWorkflowFunction
+      Handler: resume_workflow.handler
+      Runtime: python3.11
+      Timeout: 60
+      Role:
+        Ref: LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          JOB_TOKENS_TABLE:
+            Ref: JobTokensTableName
+      Events:
+        TextractCompleteTrigger:
+          Type: SNS
+          Properties:
+            Topic:
+              Ref: TextractCompleteTopicArn
+    Metadata:
+      SamResourceId: ResumeWorkflowFunction
+  ParseExtractionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: parse_extraction
+      CodeUri: ParseExtractionFunction
+      Handler: parse_extraction.handler
+      Runtime: python3.11
+      Timeout: 30
+    Metadata:
+      SamResourceId: ParseExtractionFunction
+  SaveAndNotifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: save_and_notify
+      CodeUri: SaveAndNotifyFunction
+      Handler: save_and_notify.handler
+      Runtime: python3.11
+      Timeout: 30
+      Role:
+        Ref: LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          SUMMARIES_TABLE:
+            Ref: SummariesTableName
+          SUMMARY_READY_TOPIC_ARN:
+            Ref: SummaryReadyTopicArn
+    Metadata:
+      SamResourceId: SaveAndNotifyFunction
+  IndexContractClausesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: index_contract_clauses
+      CodeUri: IndexContractClausesFunction
+      Handler: index_contract_clauses.handler
+      Runtime: python3.11
+      Timeout: 120
+      Role:
+        Ref: LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          JOB_TOKENS_TABLE:
+            Ref: JobTokensTableName
+          VECTOR_BUCKET_NAME:
+            Ref: VectorBucketName
+          VECTOR_INDEX_NAME:
+            Ref: VectorIndexName
+          EMBEDDING_MODEL_ID:
+            Ref: EmbeddingModelId
+    Metadata:
+      SamResourceId: IndexContractClausesFunction
+  PdfSummarizerStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: pdf-summarizer
+      DefinitionUri: ..\..\statemachine\pdf_summarizer.asl.json
+      DefinitionSubstitutions:
+        ContractParserHarnessArn:
+          Fn::GetAtt:
+          - ContractParserHarness
+          - Arn
+        StartTextractJobFunctionArn:
+          Fn::GetAtt:
+          - StartTextractJobFunction
+          - Arn
+        ParseExtractionFunctionArn:
+          Fn::GetAtt:
+          - ParseExtractionFunction
+          - Arn
+        SaveAndNotifyFunctionArn:
+          Fn::GetAtt:
+          - SaveAndNotifyFunction
+          - Arn
+        IndexContractClausesFunctionArn:
+          Fn::GetAtt:
+          - IndexContractClausesFunction
+          - Arn
+      Tracing:
+        Enabled: true
+      Policies:
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: StartTextractJobFunction
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: ParseExtractionFunction
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: SaveAndNotifyFunction
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: IndexContractClausesFunction
+      - Statement:
+        - Effect: Allow
+          Action:
+          - bedrock-agentcore:InvokeHarness
+          - bedrock-agentcore:InvokeAgentRuntime
+          Resource:
+            Fn::GetAtt:
+            - ContractParserHarness
+            - Arn
+  NewFormularyPdfUploadedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: new-formulary-pdf-uploaded
+      EventPattern:
+        source:
+        - aws.s3
+        detail-type:
+        - Object Created
+        detail:
+          bucket:
+            name:
+            - Ref: UploadsBucketName
+          object:
+            key:
+            - suffix: .pdf
+      Targets:
+      - Id: PdfSummarizerStateMachineTarget
+        Arn:
+          Fn::GetAtt:
+          - PdfSummarizerStateMachine
+          - Arn
+        RoleArn:
+          Ref: EventBridgeSfnRoleArn
+  MarketSnapshotsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Ref: MarketSnapshotsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: payerPlanProductKey
+        AttributeType: S
+      KeySchema:
+      - AttributeName: payerPlanProductKey
+        KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+  DeviationOutputTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Ref: DeviationOutputTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: payerPlanProductKey
+        AttributeType: S
+      KeySchema:
+      - AttributeName: payerPlanProductKey
+        KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+  ComparisonDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Fn::Sub: ${ComparisonQueueName}-dlq
+      MessageRetentionPeriod: 1209600
+  ComparisonQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Ref: ComparisonQueueName
+      VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+          - ComparisonDLQ
+          - Arn
+        maxReceiveCount: 3
+  ForwardStreamToQueueFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: forward_stream_to_queue
+      CodeUri: ForwardStreamToQueueFunction
+      Handler: forward_stream_to_queue.handler
+      Runtime: python3.11
+      Timeout: 30
+      Role:
+        Ref: LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          COMPARISON_QUEUE_URL:
+            Ref: ComparisonQueue
+      Events:
+        MarketSnapshotsStream:
+          Type: DynamoDB
+          Properties:
+            Stream:
+              Fn::GetAtt:
+              - MarketSnapshotsTable
+              - StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+        ContractExpectationsStream:
+          Type: DynamoDB
+          Properties:
+            Stream:
+              Ref: ContractExpectationsStreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+    Metadata:
+      SamResourceId: ForwardStreamToQueueFunction
+  CompareDeviationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: compare_deviation
+      CodeUri: CompareDeviationFunction
+      Handler: compare_deviation.handler
+      Runtime: python3.11
+      Timeout: 30
+      ReservedConcurrentExecutions: 5
+      Role:
+        Ref: LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          MARKET_SNAPSHOTS_TABLE:
+            Ref: MarketSnapshotsTableName
+          CONTRACT_EXPECTATIONS_TABLE:
+            Ref: SummariesTableName
+          CONTRACT_EXPECTATIONS_INDEX:
+            Ref: ContractExpectationsIndexName
+          DEVIATION_OUTPUT_TABLE:
+            Ref: DeviationOutputTableName
+          COMPARISON_QUEUE_URL:
+            Ref: ComparisonQueue
+          STALE_SOURCE_DAYS:
+            Ref: StaleSourceDays
+      Events:
+        ComparisonQueueTrigger:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - ComparisonQueue
+              - Arn
+            BatchSize: 10
+    Metadata:
+      SamResourceId: CompareDeviationFunction
+  ReasoningDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Fn::Sub: ${ComparisonQueueName}-reasoning-dlq
+      MessageRetentionPeriod: 1209600
+  HarnessExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Assumed by the AgentCore harness while it runs an agent session
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: bedrock-agentcore.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: harness-runtime
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Sid: BedrockModelInvocation
+            Effect: Allow
+            Action:
+            - bedrock:InvokeModel
+            - bedrock:InvokeModelWithResponseStream
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:bedrock:*::foundation-model/${HarnessModelId}
+            - Fn::Sub: arn:${AWS::Partition}:bedrock:*::foundation-model/${ContractParserModelId}
+            - Fn::Sub: arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:*
+          - Sid: EcrPublicImagePull
+            Effect: Allow
+            Action:
+            - ecr-public:GetAuthorizationToken
+            - sts:GetServiceBearerToken
+            Resource: '*'
+          - Sid: XRayTracing
+            Effect: Allow
+            Action:
+            - xray:PutTraceSegments
+            - xray:PutTelemetryRecords
+            - xray:GetSamplingRules
+            - xray:GetSamplingTargets
+            Resource: '*'
+          - Sid: LogGroup
+            Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:DescribeLogStreams
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/*
+          - Sid: DescribeLogGroups
+            Effect: Allow
+            Action: logs:DescribeLogGroups
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+          - Sid: LogStreams
+            Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*
+          - Sid: PutResourcePolicyForLogDelivery
+            Effect: Allow
+            Action: logs:PutResourcePolicy
+            Resource: '*'
+          - Sid: Metrics
+            Effect: Allow
+            Action: cloudwatch:PutMetricData
+            Resource: '*'
+            Condition:
+              StringEquals:
+                cloudwatch:namespace: bedrock-agentcore
+          - Sid: WorkloadIdentity
+            Effect: Allow
+            Action:
+            - bedrock-agentcore:GetWorkloadAccessToken
+            - bedrock-agentcore:GetWorkloadAccessTokenForJWT
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default
+            - Fn::Sub: arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default/workload-identity/harness_DeviationCaseAgent-*
+            - Fn::Sub: arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default/workload-identity/harness_ContractParserAgent-*
+  ContractParserHarness:
+    Type: AWS::BedrockAgentCore::Harness
+    Properties:
+      HarnessName: ContractParserAgent
+      ExecutionRoleArn:
+        Fn::GetAtt:
+        - HarnessExecutionRole
+        - Arn
+      Model:
+        BedrockModelConfig:
+          ModelId:
+            Ref: ContractParserModelId
+          Temperature: 0
+          MaxTokens: 4096
+      SystemPrompt:
+      - Text: "You are a pharmacy contracts analyst. You will be given the raw OCR'd\
+          \ text of a payer formulary access agreement between a health plan (Payer)\
+          \ and a drug manufacturer.\n\nExtract the following fields and return ONLY\
+          \ a single valid JSON object (no markdown fences, no commentary) with this\
+          \ exact shape:\n\n{\n  \"contract_id\": string or null,\n  \"payer_id\"\
+          : string or null,\n  \"payer_name\": string or null,\n  \"plan_id\": string\
+          \ or null,\n  \"plan_name\": string or null,\n  \"manufacturer_name\": string\
+          \ or null,\n  \"effective_from\": \"YYYY-MM-DD\" or null,\n  \"effective_to\"\
+          : \"YYYY-MM-DD\" or null,\n  \"implementation_grace_days\": integer or null,\n\
+          \  \"coverage_terms\": [\n    {\n      \"product_id\": string or null,\n\
+          \      \"product_name\": string,\n      \"strength\": string or null,\n\
+          \      \"expected_tier\": integer or null,\n      \"expected_status\": string\
+          \ or null,\n      \"pa_allowed\": \"Y\" or \"N\" or null,\n      \"st_allowed\"\
+          : \"Y\" or \"N\" or null,\n      \"ql_allowed\": \"Y\" or \"N\" or null,\n\
+          \      \"ql_limit\": string or null,\n      \"comparator_product_id\": string\
+          \ or null,\n      \"comparator_product_name\": string or null,\n      \"\
+          parity_required\": \"Y\" or \"N\" or null,\n      \"clause_reference\":\
+          \ string or null\n    }\n  ],\n  \"rebate_terms\": [\n    {\n      \"tier\"\
+          : string or null,\n      \"base_rebate_pct\": string or null,\n      \"\
+          performance_rebate_pct\": string or null,\n      \"performance_condition\"\
+          : string or null\n    }\n  ],\n  \"key_dates_and_amounts\": [string],\n\
+          \  \"executive_summary\": string\n}\n\nField notes:\n- \"contract_id\",\
+          \ \"payer_id\", \"plan_id\", \"product_id\" are business identifiers if\
+          \ the document states them explicitly (e.g. an agreement number, payer code,\
+          \ plan code, NDC/product code). Use null if the document does not state\
+          \ one - do not invent an identifier.\n- \"effective_from\" and \"effective_to\"\
+          \ are the agreement term as ISO dates: convert \"January 1, 2026\" to \"\
+          2026-01-01\". They are compared as text downstream, so any other format\
+          \ breaks the comparison.\n- \"implementation_grace_days\" is the number\
+          \ of days after an approved formulary change during which a discrepancy\
+          \ may be treated as administrative lag while the payer completes system\
+          \ propagation (an \"implementation grace period\" clause). Null if the agreement\
+          \ has no such clause.\n- \"expected_tier\" is the formulary tier as an integer\
+          \ (e.g. 2), not the word \"Preferred\".\n- \"expected_status\" is the plain-language\
+          \ placement (e.g. \"Preferred\", \"Non-preferred\", \"Covered\", \"Not covered\"\
+          ).\n- \"pa_allowed\" / \"st_allowed\" / \"ql_allowed\" answer \"does the\
+          \ payer require this utilization management restriction on this product\"\
+          : \"Y\" if required, \"N\" if explicitly not required, null if not stated.\n\
+          - \"comparator_product_id\"/\"comparator_product_name\" and \"parity_required\"\
+          \ only apply if the agreement includes a parity/most-favored-formulary clause\
+          \ naming a specific comparator drug.\n- \"clause_reference\" is the section/exhibit\
+          \ number the coverage terms came from (e.g. \"Section 3.2\" or \"Exhibit\
+          \ B\"), for audit traceability. Use null if the document has no section\
+          \ numbering.\n- One entry in \"coverage_terms\" per distinct product (and\
+          \ per plan, if the agreement covers multiple plans with different terms\
+          \ for the same product - repeat the product with a different plan_id/plan_name\
+          \ context inferred from surrounding text).\n\nIf a field cannot be found\
+          \ in the text, use null (or an empty array for list fields). Do not invent\
+          \ values that are not present in the text. Be concise and factual.\n"
+      MaxIterations: 3
+      MaxTokens: 6000
+      TimeoutSeconds: 300
+      AllowedTools:
+      - '@none/no-tools'
+      Memory:
+        Disabled: {}
+  DeviationCaseHarness:
+    Type: AWS::BedrockAgentCore::Harness
+    Properties:
+      HarnessName: DeviationCaseAgent
+      ExecutionRoleArn:
+        Fn::GetAtt:
+        - HarnessExecutionRole
+        - Arn
+      Model:
+        BedrockModelConfig:
+          ModelId:
+            Ref: HarnessModelId
+          Temperature: 0
+          MaxTokens: 1500
+      SystemPrompt:
+      - Text: Respond with exactly one JSON object and nothing else.
+      MaxIterations: 3
+      MaxTokens: 3000
+      TimeoutSeconds: 120
+      AllowedTools:
+      - '@none/no-tools'
+      Memory:
+        Disabled: {}
+  CaseApprovalTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Formulary deviation approvals
+  CaseApprovalSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasApprovalEmail
+    Properties:
+      TopicArn:
+        Ref: CaseApprovalTopic
+      Protocol: email
+      Endpoint:
+        Ref: ApprovalEmail
+  LoadCaseContextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: load_case_context
+      CodeUri: LoadCaseContextFunction
+      Handler: load_case_context.handler
+      Runtime: python3.11
+      Timeout: 60
+      Environment:
+        Variables:
+          DEVIATION_OUTPUT_TABLE:
+            Ref: DeviationOutputTable
+          VECTOR_BUCKET_NAME:
+            Ref: VectorBucketName
+          VECTOR_INDEX_NAME:
+            Ref: VectorIndexName
+          EMBEDDING_MODEL_ID:
+            Ref: EmbeddingModelId
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: DeviationOutputTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - s3vectors:QueryVectors
+          - s3vectors:GetVectors
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:s3vectors:${AWS::Region}:${AWS::AccountId}:bucket/${VectorBucketName}/index/${VectorIndexName}
+        - Effect: Allow
+          Action: bedrock:InvokeModel
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${EmbeddingModelId}
+    Metadata:
+      SamResourceId: LoadCaseContextFunction
+  ValidateProposalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: validate_proposal
+      CodeUri: ValidateProposalFunction
+      Handler: validate_proposal.handler
+      Runtime: python3.11
+      Timeout: 30
+    Metadata:
+      SamResourceId: ValidateProposalFunction
+  SaveCaseResultFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: save_case_result
+      CodeUri: SaveCaseResultFunction
+      Handler: save_case_result.handler
+      Runtime: python3.11
+      Timeout: 30
+      Environment:
+        Variables:
+          DEVIATION_OUTPUT_TABLE:
+            Ref: DeviationOutputTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: DeviationOutputTable
+    Metadata:
+      SamResourceId: SaveCaseResultFunction
+  RequestApprovalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: request_approval
+      CodeUri: RequestApprovalFunction
+      Handler: request_approval.handler
+      Runtime: python3.11
+      Timeout: 30
+      Environment:
+        Variables:
+          DEVIATION_OUTPUT_TABLE:
+            Ref: DeviationOutputTable
+          APPROVAL_TOPIC_ARN:
+            Ref: CaseApprovalTopic
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: DeviationOutputTable
+      - SNSPublishMessagePolicy:
+          TopicName:
+            Fn::GetAtt:
+            - CaseApprovalTopic
+            - TopicName
+      - Statement:
+        - Effect: Allow
+          Action: states:SendTaskSuccess
+          Resource: '*'
+    Metadata:
+      SamResourceId: RequestApprovalFunction
+  RecordDecisionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: record_decision
+      CodeUri: RecordDecisionFunction
+      Handler: record_decision.handler
+      Runtime: python3.11
+      Timeout: 30
+      Environment:
+        Variables:
+          DEVIATION_OUTPUT_TABLE:
+            Ref: DeviationOutputTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: DeviationOutputTable
+    Metadata:
+      SamResourceId: RecordDecisionFunction
+  DeviationCaseStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: deviation-case-workflow
+      Type: STANDARD
+      DefinitionUri: ..\..\statemachine\deviation_case.asl.json
+      DefinitionSubstitutions:
+        HarnessArn:
+          Fn::GetAtt:
+          - DeviationCaseHarness
+          - Arn
+        LoadCaseContextFunctionArn:
+          Fn::GetAtt:
+          - LoadCaseContextFunction
+          - Arn
+        ValidateProposalFunctionArn:
+          Fn::GetAtt:
+          - ValidateProposalFunction
+          - Arn
+        SaveCaseResultFunctionArn:
+          Fn::GetAtt:
+          - SaveCaseResultFunction
+          - Arn
+        RequestApprovalFunctionArn:
+          Fn::GetAtt:
+          - RequestApprovalFunction
+          - Arn
+        RecordDecisionFunctionArn:
+          Fn::GetAtt:
+          - RecordDecisionFunction
+          - Arn
+      Tracing:
+        Enabled: true
+      Policies:
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: LoadCaseContextFunction
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: ValidateProposalFunction
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: SaveCaseResultFunction
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: RequestApprovalFunction
+      - LambdaInvokePolicy:
+          FunctionName:
+            Ref: RecordDecisionFunction
+      - Statement:
+        - Effect: Allow
+          Action:
+          - bedrock-agentcore:InvokeHarness
+          - bedrock-agentcore:InvokeAgentRuntime
+          Resource:
+            Fn::GetAtt:
+            - DeviationCaseHarness
+            - Arn
+  CaseTriggerPipeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: pipes.amazonaws.com
+          Action: sts:AssumeRole
+          Condition:
+            StringEquals:
+              aws:SourceAccount:
+                Ref: AWS::AccountId
+      Policies:
+      - PolicyName: read-stream-start-case
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:DescribeStream
+            - dynamodb:GetRecords
+            - dynamodb:GetShardIterator
+            - dynamodb:ListStreams
+            Resource:
+              Fn::GetAtt:
+              - DeviationOutputTable
+              - StreamArn
+          - Effect: Allow
+            Action: states:StartExecution
+            Resource:
+              Ref: DeviationCaseStateMachine
+          - Effect: Allow
+            Action: sqs:SendMessage
+            Resource:
+              Fn::GetAtt:
+              - ReasoningDLQ
+              - Arn
+  CaseTriggerPipe:
+    Type: AWS::Pipes::Pipe
+    Properties:
+      Name: deviation-case-trigger
+      RoleArn:
+        Fn::GetAtt:
+        - CaseTriggerPipeRole
+        - Arn
+      Source:
+        Fn::GetAtt:
+        - DeviationOutputTable
+        - StreamArn
+      SourceParameters:
+        DynamoDBStreamParameters:
+          StartingPosition: LATEST
+          BatchSize: 1
+          MaximumRetryAttempts: 2
+          MaximumRecordAgeInSeconds: 3600
+          DeadLetterConfig:
+            Arn:
+              Fn::GetAtt:
+              - ReasoningDLQ
+              - Arn
+        FilterCriteria:
+          Filters:
+          - Pattern: '{"eventName": ["INSERT", "MODIFY"], "dynamodb": {"NewImage":
+              {"status": {"S": ["Potential deviation - review required", "Route to
+              data steward"]}, "reasoningStartedAt": {"N": [{"exists": false}]}}}}'
+      Target:
+        Ref: DeviationCaseStateMachine
+      TargetParameters:
+        StepFunctionStateMachineParameters:
+          InvocationType: FIRE_AND_FORGET
+  VectorBucket:
+    Type: AWS::S3Vectors::VectorBucket
+    Properties:
+      VectorBucketName:
+        Ref: VectorBucketName
+  VectorIndex:
+    Type: AWS::S3Vectors::Index
+    DependsOn: VectorBucket
+    Properties:
+      VectorBucketName:
+        Ref: VectorBucketName
+      IndexName:
+        Ref: VectorIndexName
+      DataType: float32
+      Dimension: 1024
+      DistanceMetric: cosine
+      MetadataConfiguration:
+        NonFilterableMetadataKeys:
+        - text
+        - title
+        - sourceKey
+        - triggerCondition
+        - nextBestAction
+        - requiredEvidence
+        - doNotDo
+  IngestPlaybookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ingest_playbook
+      CodeUri: IngestPlaybookFunction
+      Handler: ingest_playbook.handler
+      Runtime: python3.11
+      Timeout: 60
+      Role:
+        Ref: LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          VECTOR_BUCKET_NAME:
+            Ref: VectorBucketName
+          VECTOR_INDEX_NAME:
+            Ref: VectorIndexName
+          EMBEDDING_MODEL_ID:
+            Ref: EmbeddingModelId
+    Metadata:
+      SamResourceId: IngestPlaybookFunction
+  IngestPlaybookInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: IngestPlaybookFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - NewPlaybookUploadedRule
+        - Arn
+  NewPlaybookUploadedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: new-playbook-uploaded
+      EventPattern:
+        source:
+        - aws.s3
+        detail-type:
+        - Object Created
+        detail:
+          bucket:
+            name:
+            - Ref: UploadsBucketName
+          object:
+            key:
+            - prefix: playbook/
+      Targets:
+      - Id: IngestPlaybookTarget
+        Arn:
+          Fn::GetAtt:
+          - IngestPlaybookFunction
+          - Arn
+  IngestMarketSnapshotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ingest_market_snapshot
+      CodeUri: IngestMarketSnapshotFunction
+      Handler: ingest_market_snapshot.handler
+      Runtime: python3.11
+      Timeout: 60
+      Role:
+        Ref: LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          MARKET_SNAPSHOTS_TABLE:
+            Ref: MarketSnapshotsTableName
+    Metadata:
+      SamResourceId: IngestMarketSnapshotFunction
+  IngestMarketSnapshotInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: IngestMarketSnapshotFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - NewMarketDataUploadedRule
+        - Arn
+  NewMarketDataUploadedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: new-market-data-uploaded
+      EventPattern:
+        source:
+        - aws.s3
+        detail-type:
+        - Object Created
+        detail:
+          bucket:
+            name:
+            - Ref: UploadsBucketName
+          object:
+            key:
+            - prefix: market-data/
+      Targets:
+      - Id: IngestMarketSnapshotTarget
+        Arn:
+          Fn::GetAtt:
+          - IngestMarketSnapshotFunction
+          - Arn
+Outputs:
+  StateMachineArn:
+    Value:
+      Fn::GetAtt:
+      - PdfSummarizerStateMachine
+      - Arn
+  StartTextractJobFunctionArn:
+    Value:
+      Fn::GetAtt:
+      - StartTextractJobFunction
+      - Arn
+  ResumeWorkflowFunctionArn:
+    Value:
+      Fn::GetAtt:
+      - ResumeWorkflowFunction
+      - Arn
+  ParseExtractionFunctionArn:
+    Value:
+      Fn::GetAtt:
+      - ParseExtractionFunction
+      - Arn
+  ContractParserHarnessArn:
+    Value:
+      Fn::GetAtt:
+      - ContractParserHarness
+      - Arn
+  SaveAndNotifyFunctionArn:
+    Value:
+      Fn::GetAtt:
+      - SaveAndNotifyFunction
+      - Arn
+  MarketSnapshotsTableName:
+    Value:
+      Ref: MarketSnapshotsTable
+  DeviationOutputTableName:
+    Value:
+      Ref: DeviationOutputTable
+  ComparisonQueueUrl:
+    Value:
+      Ref: ComparisonQueue
+  ComparisonQueueArn:
+    Value:
+      Fn::GetAtt:
+      - ComparisonQueue
+      - Arn
+  IngestMarketSnapshotFunctionArn:
+    Value:
+      Fn::GetAtt:
+      - IngestMarketSnapshotFunction
+      - Arn
+  CompareDeviationFunctionArn:
+    Value:
+      Fn::GetAtt:
+      - CompareDeviationFunction
+      - Arn
+  DeviationCaseStateMachineArn:
+    Value:
+      Ref: DeviationCaseStateMachine
+  DeviationCaseHarnessArn:
+    Value:
+      Fn::GetAtt:
+      - DeviationCaseHarness
+      - Arn
+  CaseApprovalTopicArn:
+    Value:
+      Ref: CaseApprovalTopic
+  IndexContractClausesFunctionArn:
+    Value:
+      Fn::GetAtt:
+      - IndexContractClausesFunction
+      - Arn
+  IngestPlaybookFunctionArn:
+    Value:
+      Fn::GetAtt:
+      - IngestPlaybookFunction
+      - Arn
+  VectorBucketArn:
+    Value:
+      Fn::GetAtt:
+      - VectorBucket
+      - VectorBucketArn
+  VectorIndexArn:
+    Value:
+      Fn::GetAtt:
+      - VectorIndex
+      - IndexArn
+  ReasoningDLQUrl:
+    Value:
+      Ref: ReasoningDLQ

@@ -1,0 +1,155 @@
+{
+  "Comment": "Contract PDF to structured terms. Textract reads it, a Contract Parser agent proposes the terms, deterministic code validates them before anything is saved.",
+  "QueryLanguage": "JSONata",
+  "StartAt": "StartTextractJob",
+  "TimeoutSeconds": 3600,
+  "States": {
+    "StartTextractJob": {
+      "Type": "Task",
+      "Comment": "Starts async Textract and waits for its SNS callback (resume_workflow completes the token). Also dedupes an unchanged re-upload.",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Arguments": {
+        "FunctionName": "${StartTextractJobFunctionArn}",
+        "Payload": {
+          "detail": "{% $states.input.detail %}",
+          "taskToken": "{% $states.context.Task.Token %}"
+        }
+      },
+      "TimeoutSeconds": 900,
+      "Assign": {
+        "bucket": "{% $states.result.bucket %}",
+        "key": "{% $states.result.key %}",
+        "etag": "{% $exists($states.result.etag) ? $states.result.etag : null %}",
+        "extractedText": "{% $states.result.extractedText %}",
+        "skipped": "{% $exists($states.result.skipped) ? $states.result.skipped : false %}"
+      },
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "WorkflowFailed" }],
+      "Next": "SkipCheck"
+    },
+
+    "SkipCheck": {
+      "Type": "Choice",
+      "Comment": "This exact file version already succeeded end to end: no OCR, no agent, no spend.",
+      "Choices": [{ "Condition": "{% $skipped = true %}", "Next": "AlreadyProcessed" }],
+      "Default": "ContractParser"
+    },
+
+    "ContractParser": {
+      "Type": "Task",
+      "Comment": "Agent: reads the OCR text and PROPOSES the contract's terms as JSON. Its system prompt is the harness default. It writes nothing.",
+      "Resource": "arn:aws:states:::bedrockagentcore:invokeHarness",
+      "Arguments": {
+        "HarnessArn": "${ContractParserHarnessArn}",
+        "RuntimeSessionId": "{% $uuid() %}",
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [{ "Text": "{% $extractedText %}" }]
+          }
+        ],
+        "MaxIterations": 3,
+        "TimeoutSeconds": 300
+      },
+      "Assign": {
+        "parserText": "{% $states.result.Output.Message.Content[0].Text %}"
+      },
+      "Retry": [
+        { "ErrorEquals": ["BedrockAgentCore.ThrottlingException"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "ExtractionFailed" }],
+      "Next": "ParseExtraction"
+    },
+
+    "ParseExtraction": {
+      "Type": "Task",
+      "Comment": "Deterministic validator: parses defensively, grounds every id in the document text, converts dates to ISO, normalizes types.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "${ParseExtractionFunctionArn}",
+        "Payload": {
+          "agentText": "{% $parserText %}",
+          "sourceText": "{% $extractedText %}"
+        }
+      },
+      "Assign": { "parsed": "{% $states.result.Payload %}" },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "WorkflowFailed" }],
+      "Next": "ExtractionUsable"
+    },
+
+    "ExtractionUsable": {
+      "Type": "Choice",
+      "Comment": "Nothing is saved unless there is at least one coverage term and the payer is identified.",
+      "Choices": [{ "Condition": "{% $parsed.ok = true %}", "Next": "SaveAndNotify" }],
+      "Default": "ExtractionFailed"
+    },
+
+    "SaveAndNotify": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "${SaveAndNotifyFunctionArn}",
+        "Payload": {
+          "bucket": "{% $bucket %}",
+          "key": "{% $key %}",
+          "extracted": "{% $parsed.extracted %}"
+        }
+      },
+      "Assign": { "contractId": "{% $states.result.Payload.contractId %}" },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "WorkflowFailed" }],
+      "Next": "IndexClauses"
+    },
+
+    "IndexClauses": {
+      "Type": "Task",
+      "Comment": "Last step, and the only one that writes the dedupe marker: it means this file fully succeeded.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "${IndexContractClausesFunctionArn}",
+        "Payload": {
+          "contractId": "{% $contractId %}",
+          "bucket": "{% $bucket %}",
+          "key": "{% $key %}",
+          "etag": "{% $etag %}",
+          "extractedText": "{% $extractedText %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "WorkflowFailed" }],
+      "End": true
+    },
+
+    "AlreadyProcessed": { "Type": "Succeed", "Comment": "Unchanged re-upload; nothing to do." },
+    "ExtractionFailed": {
+      "Type": "Fail",
+      "Error": "ContractExtractionFailed",
+      "Cause": "The contract parser agent failed, or its output could not be validated into usable terms (see the ParseExtraction state's output for the issues). Nothing was saved and the dedupe marker was not written, so re-uploading retries."
+    },
+    "WorkflowFailed": {
+      "Type": "Fail",
+      "Error": "FormularyAgreementProcessingFailed"
+    }
+  }
+}

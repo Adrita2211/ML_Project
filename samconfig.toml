@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "formulary-agent-stack"
+resolve_s3 = true
+s3_prefix = "formulary-agent-stack"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "UploadsBucketName=\"payer-formulary-uploads-313\" JobTokensTableName=\"TextractJobTokens\" SummariesTableName=\"FormularyAgreementSummaries\" TextractCompleteTopicArn=\"arn:aws:sns:us-east-1:058264386876:textract-job-complete\" SummaryReadyTopicArn=\"arn:aws:sns:us-east-1:058264386876:document-summary-ready\" LambdaExecutionRoleArn=\"arn:aws:iam::058264386876:role/lambda-execution-role\" TextractSnsPublishRoleArn=\"arn:aws:iam::058264386876:role/textract-sns-publish-role\" EventBridgeSfnRoleArn=\"arn:aws:iam::058264386876:role/eventbridge-sfn-role\""
+image_repositories = []
+
+[default.global.parameters]
+region = "us-east-1"

@@ -1,0 +1,327 @@
+{
+  "Comment": "Deviation case: agents propose, deterministic code validates, a human approves. No agent state writes to any system.",
+  "QueryLanguage": "JSONata",
+  "StartAt": "LoadContext",
+  "TimeoutSeconds": 691200,
+  "States": {
+    "LoadContext": {
+      "Type": "Task",
+      "Comment": "Claims the case (idempotent) and retrieves clauses + approved playbook rows deterministically.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "${LoadCaseContextFunctionArn}",
+        "Payload": {
+          "payerPlanProductKey": "{% $states.input[0].dynamodb.Keys.payerPlanProductKey.S %}",
+          "signature": "{% $states.input[0].dynamodb.NewImage.signature.S %}",
+          "executionId": "{% $states.context.Execution.Id %}"
+        }
+      },
+      "Assign": {
+        "claimed": "{% $states.result.Payload.claimed %}",
+        "key": "{% $states.result.Payload.key %}",
+        "signature": "{% $states.result.Payload.signature %}",
+        "severity": "{% $states.result.Payload.severity %}",
+        "ctx": "{% $states.result.Payload.context %}",
+        "analystText": null,
+        "plannerResults": [],
+        "verifierText": null,
+        "agentFailed": false
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "CaseFailed" }],
+      "Next": "WasClaimed"
+    },
+
+    "WasClaimed": {
+      "Type": "Choice",
+      "Comment": "Another execution already owns this finding, or it was superseded.",
+      "Choices": [{ "Condition": "{% $claimed = true %}", "Next": "RouteByMode" }],
+      "Default": "AlreadyHandled"
+    },
+
+    "RouteByMode": {
+      "Type": "Choice",
+      "Comment": "Data-quality exceptions need no reasoning: the playbook row is the action. Only real deviations reach an agent.",
+      "Choices": [{ "Condition": "{% $ctx.mode = 'agents' %}", "Next": "RootCauseAnalyst" }],
+      "Default": "ValidateProposal"
+    },
+
+    "RootCauseAnalyst": {
+      "Type": "Task",
+      "Comment": "Agent 1: explains the likely cause and addresses the ambiguities the rules could not settle.",
+      "Resource": "arn:aws:states:::bedrockagentcore:invokeHarness",
+      "Arguments": {
+        "HarnessArn": "${HarnessArn}",
+        "RuntimeSessionId": "{% $uuid() %}",
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [{ "Text": "{% $string({'deviation': $ctx.facts, 'clauses': $ctx.clauses}) %}" }]
+          }
+        ],
+        "SystemPrompt": [
+          {
+            "Text": "You are a pharmacy market-access contracts analyst. A rules engine already compared a payer formulary agreement with observed market data and found a POTENTIAL deviation. You are given the deviation facts and the relevant contract clauses. The facts include deviatingFields, the deterministic findings that define this deviation, and notDeviations, differences that are NOT deviations. Your root_cause must explain the fields in deviatingFields, and you must never present anything in notDeviations as a problem. The facts include contractSource: follow it. If it says no clause text is on file, refer to 'the contract terms on file' and never say the contract 'states', 'explicitly states' or quote it. Respond with EXACTLY one JSON object and nothing else: {\"root_cause\": string, \"confidence\": \"high\"|\"medium\"|\"low\", \"ambiguity_assessment\": string or null}. root_cause is the most likely explanation, worded with the confidence it deserves; distinguish a real payer-side change from a possible data problem; use only the facts and clauses given. ambiguity_assessment addresses each item in ambiguities (for example whether a discrepancy inside the implementation grace period may be administrative lag, which needs the payer's written confirmation), or null. This is a POTENTIAL deviation. Never state or imply a confirmed breach and never recommend withholding, offsetting, terminating, or any financial or legal action; only contracting personnel determine breach."
+          }
+        ],
+        "MaxIterations": 3,
+        "TimeoutSeconds": 120
+      },
+      "Assign": {
+        "analystText": "{% $states.result.Output.Message.Content[0].Text %}"
+      },
+      "Retry": [
+        { "ErrorEquals": ["BedrockAgentCore.ThrottlingException"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Comment": "Fall back to approved templates for human review rather than fail the case.",
+          "Assign": { "agentFailed": true },
+          "Next": "ValidateProposal"
+        }
+      ],
+      "Next": "PersonalizeActions"
+    },
+
+    "PersonalizeActions": {
+      "Type": "Map",
+      "Comment": "Agent 2, one per persona in parallel: adapts each APPROVED playbook action to this case. Cannot add steps or personas.",
+      "Items": "{% $ctx.playbook[] %}",
+      "MaxConcurrency": 3,
+      "ItemSelector": {
+        "row": "{% $states.context.Map.Item.Value %}",
+        "facts": "{% $ctx.facts %}",
+        "analystText": "{% $analystText %}"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": { "Mode": "INLINE" },
+        "StartAt": "PlanForPersona",
+        "States": {
+          "PlanForPersona": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::bedrockagentcore:invokeHarness",
+            "Arguments": {
+              "HarnessArn": "${HarnessArn}",
+              "RuntimeSessionId": "{% $uuid() %}",
+              "Messages": [
+                {
+                  "Role": "user",
+                  "Content": [
+                    {
+                      "Text": "{% $string({'persona': $states.input.row.persona, 'classification': $states.input.row.classification, 'approvedAction': $states.input.row.nextBestAction, 'requiredEvidence': $states.input.row.requiredEvidence, 'doNotDo': $states.input.row.doNotDo, 'deviation': $states.input.facts, 'analystAssessment': $states.input.analystText}) %}"
+                    }
+                  ]
+                }
+              ],
+              "SystemPrompt": [
+                {
+                  "Text": "You adapt one pre-approved next-best-action to a specific formulary deviation for one persona. Respond with EXACTLY one JSON object and nothing else: {\"next_best_action\": string}. Keep the approved action's steps and intent: name the product, plan, tiers and dates from the deviation facts, but do not add steps, do not add personas, and respect doNotDo. Frame the action around the fields in the deviation's deviatingFields, and never treat anything in notDeviations as a problem. The facts include contractSource: follow it. If it says no clause text is on file, refer to 'the contract terms on file' and never say the contract 'states', 'explicitly states' or quote it. This is a POTENTIAL deviation: never state or imply a confirmed breach, and never recommend withholding, offsetting, terminating, or any financial or legal action."
+                }
+              ],
+              "MaxIterations": 3,
+              "TimeoutSeconds": 90
+            },
+            "Retry": [
+              { "ErrorEquals": ["BedrockAgentCore.ThrottlingException"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Comment": "This persona falls back to its approved template in the validator.",
+                "Output": { "persona": "{% $states.input.row.persona %}", "classification": "{% $states.input.row.classification %}", "text": null },
+                "Next": "PersonaDone"
+              }
+            ],
+            "Output": {
+              "persona": "{% $states.input.row.persona %}",
+              "classification": "{% $states.input.row.classification %}",
+              "text": "{% $states.result.Output.Message.Content[0].Text %}"
+            },
+            "Next": "PersonaDone"
+          },
+          "PersonaDone": { "Type": "Pass", "End": true }
+        }
+      },
+      "Assign": { "plannerResults": "{% $states.result %}" },
+      "Next": "NeedsVerification"
+    },
+
+    "NeedsVerification": {
+      "Type": "Choice",
+      "Comment": "Independent verifier agent for Critical and High cases: bounds cost, and covers the severities where a wrong story matters most.",
+      "Choices": [{ "Condition": "{% $severity = 'Critical' or $severity = 'High' %}", "Next": "VerifyGrounding" }],
+      "Default": "ValidateProposal"
+    },
+
+    "VerifyGrounding": {
+      "Type": "Task",
+      "Comment": "Agent 3: a separate judge. Its verdict is recorded and flags the case; it does not decide anything.",
+      "Resource": "arn:aws:states:::bedrockagentcore:invokeHarness",
+      "Arguments": {
+        "HarnessArn": "${HarnessArn}",
+        "RuntimeSessionId": "{% $uuid() %}",
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "Text": "{% $string({'deviation': $ctx.facts, 'clauses': $ctx.clauses, 'approvedActions': $ctx.playbook, 'analystOutput': $analystText, 'proposedActions': $plannerResults}) %}"
+              }
+            ]
+          }
+        ],
+        "SystemPrompt": [
+          {
+            "Text": "You are an independent reviewer of a proposed formulary-deviation assessment. You are given the deviation facts (including deviatingFields, the deterministic findings, and notDeviations), the contract clauses, the APPROVED next-best-actions from the playbook, an analyst's root-cause output, and the proposed per-persona actions. Respond with EXACTLY one JSON object and nothing else: {\"verdict\": \"pass\"|\"fail\", \"issues\": [string]}. Check four things. (1) The root cause explains the fields in deviatingFields, does not present anything in notDeviations as a problem, and claims no facts absent from the deviation facts and clauses. (2) No text says a breach has occurred or been confirmed (for example 'breach', 'violated', 'non-compliant'); describing what the contract requires, or that the market data differs from it, is NOT a confirmed breach. (3) No proposed action PERFORMS or commits to a financial, legal or external step: sending or submitting anything to a payer, withholding, offsetting, terminating, or applying a remedy. Preparing, drafting, reviewing, requesting validation, or determining an escalation or cure path is exactly what the approved actions prescribe and is NOT a failure. (4) Each proposed action stays within its approved action: it may add product, plan, tier and date detail but must not add steps the approved action does not contain. Quote the offending phrase in each issue. Pass if you find none."
+          }
+        ],
+        "MaxIterations": 3,
+        "TimeoutSeconds": 90
+      },
+      "Assign": {
+        "verifierText": "{% $states.result.Output.Message.Content[0].Text %}"
+      },
+      "Retry": [
+        { "ErrorEquals": ["BedrockAgentCore.ThrottlingException"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Comment": "Unreadable verification is itself flagged by the validator; the case continues to human review.",
+          "Assign": { "verifierText": "{}" },
+          "Next": "ValidateProposal"
+        }
+      ],
+      "Next": "ValidateProposal"
+    },
+
+    "ValidateProposal": {
+      "Type": "Task",
+      "Comment": "Deterministic validator: parses defensively, applies the breach/financial guardrail, takes approval flags and do-not-do from the playbook, falls back to templates.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "${ValidateProposalFunctionArn}",
+        "Payload": {
+          "context": "{% $ctx %}",
+          "analystText": "{% $analystText %}",
+          "plannerResults": "{% $plannerResults %}",
+          "verifierText": "{% $verifierText %}",
+          "agentFailed": "{% $agentFailed %}"
+        }
+      },
+      "Assign": { "validated": "{% $states.result.Payload %}" },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "CaseFailed" }],
+      "Next": "SaveResult"
+    },
+
+    "SaveResult": {
+      "Type": "Task",
+      "Comment": "Deterministic write. Dropped if the finding changed while agents were working.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "${SaveCaseResultFunctionArn}",
+        "Payload": {
+          "key": "{% $key %}",
+          "signature": "{% $signature %}",
+          "result": "{% $validated %}"
+        }
+      },
+      "Assign": {
+        "saved": "{% $states.result.Payload.saved %}",
+        "needsApproval": "{% $states.result.Payload.needsApproval %}"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "CaseFailed" }],
+      "Next": "ApprovalNeeded"
+    },
+
+    "ApprovalNeeded": {
+      "Type": "Choice",
+      "Choices": [{ "Condition": "{% $saved = true and $needsApproval = true %}", "Next": "RequestApproval" }],
+      "Default": "Done"
+    },
+
+    "RequestApproval": {
+      "Type": "Task",
+      "Comment": "Human gate. The execution is paused with no compute charge until someone calls SendTaskSuccess with the stored token.",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Arguments": {
+        "FunctionName": "${RequestApprovalFunctionArn}",
+        "Payload": {
+          "key": "{% $key %}",
+          "signature": "{% $signature %}",
+          "taskToken": "{% $states.context.Task.Token %}"
+        }
+      },
+      "TimeoutSeconds": 604800,
+      "Output": "{% $states.result %}",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "Comment": "No decision in 7 days.",
+          "Output": { "decision": "expired" },
+          "Next": "RecordDecision"
+        },
+        { "ErrorEquals": ["States.ALL"], "Next": "CaseFailed" }
+      ],
+      "Next": "RecordDecision"
+    },
+
+    "RecordDecision": {
+      "Type": "Task",
+      "Comment": "Records the outcome only. Nothing is sent to a payer or anyone else (contract Sec 5.2).",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "${RecordDecisionFunctionArn}",
+        "Payload": {
+          "key": "{% $key %}",
+          "signature": "{% $signature %}",
+          "decision": "{% $exists($states.input.decision) ? $states.input.decision : 'missing' %}",
+          "decidedBy": "{% $exists($states.input.decidedBy) ? $states.input.decidedBy : null %}",
+          "comment": "{% $exists($states.input.comment) ? $states.input.comment : null %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "CaseFailed" }],
+      "Next": "Done"
+    },
+
+    "AlreadyHandled": { "Type": "Succeed", "Comment": "Claimed by another execution, or the finding changed." },
+    "Done": { "Type": "Succeed" },
+    "CaseFailed": {
+      "Type": "Fail",
+      "Error": "DeviationCaseFailed",
+      "Cause": "A deterministic step failed after retries. The case row is claimed but has no result; inspect this execution."
+    }
+  }
+}

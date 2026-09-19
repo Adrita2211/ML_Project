@@ -1,0 +1,175 @@
+Synthetic Payer Formulary Access Agreement 
+
+Between Demo Pharma, Inc. and NorthStar Health Plan 
+
+Agreement ID CTR-1001 
+Product BrandAlpha (Molecule Alpha) 
+Comparator BrandBeta (Molecule Beta) 
+Term January 1, 2026 through December 31, 2026 
+Covered segment NorthStar Commercial Plus, pharmacy benefit 
+
+Purpose of this artifact. This fictional agreement is designed to test contract-clause extraction, expected-state creation, formulary deviation 
+detection, evidence assembly, and persona-specific next-best-action generation. All parties, products, plans, identifiers, financial terms, and events 
+are synthetic. 
+
+PoC artifact prepared for Formulary Deviation Agent demonstration 
+
+SYNTHETIC DEMONSTRATION AGREEMENT - NOT LEGAL ADVICE - NOT FOR COMMERCIAL USE Page 1 
+
+
+1. Parties, scope and definitions 
+1.1 Parties 
+This Formulary Access Agreement (the "Agreement") is entered into by and between Demo Pharma, Inc. ("Manufacturer") and 
+NorthStar Health Plan ("Payer"). The Agreement applies only to the plan and benefit segment listed in Exhibit A. 
+
+1.2 Contracted Product 
+"Contracted Product" means BrandAlpha, including the package identifiers listed in Exhibit A. Product mappings outside Exhibit A 
+are not automatically in scope. 
+
+1.3 Comparator Product 
+"Comparator Product" means BrandBeta for Condition X. Comparator status is evaluated within the same plan, benefit type, 
+indication, and formulary effective period. 
+
+1.4 Preferred Tier 
+"Preferred Tier" means Tier 2 under the Payer tier taxonomy shown in Exhibit B. If the Payer publishes another label, the 
+operational crosswalk in Exhibit B governs for monitoring purposes. 
+
+1.5 Utilization Management 
+"Utilization Management" or "UM" includes prior authorization (PA), step therapy (ST), quantity limits (QL), indication restrictions, 
+and other access edits. 
+
+1.6 Data discrepancy vs. confirmed breach 
+An observed difference between the contractual expected state and a formulary data source is a potential deviation. It becomes 
+a confirmed contractual breach only after plan applicability, dates, exclusions, source quality, implementation periods, and written 
+evidence have been reviewed by authorized personnel. 
+
+2. Formulary access commitments 
+2.1 Tier commitment 
+During the Term, Payer shall maintain the Contracted Product on Tier 2 Preferred for the Covered Segment, subject to the 
+exclusions and transition provisions in this Agreement. 
+
+2.2 Parity commitment 
+The Contracted Product shall be placed no less favorably than the Comparator Product with respect to formulary status, coverage 
+status, PA, ST, and QL, within the Covered Segment. A difference is not a parity deviation if it results from a documented 
+indication, benefit, product-form, or plan-design distinction permitted by this Agreement. 
+
+2.3 Coverage commitment 
+The Contracted Product shall remain covered for the Covered Segment. A status of not covered, excluded, non-formulary, or 
+equivalent shall constitute a potential coverage deviation unless an approved exception applies. 
+
+2.4 Utilization-management commitment 
+PA is permitted using the criteria described in Exhibit C. ST is not permitted. QL is permitted up to one package per 28 days. Any 
+additional or more restrictive requirement is a potential restriction escalation. 
+
+SYNTHETIC DEMONSTRATION AGREEMENT - NOT LEGAL ADVICE - NOT FOR COMMERCIAL USE Page 2 
+
+
+3. Formulary change management 
+3.1 Advance notification 
+Payer shall provide written notice of a material change affecting tier, coverage, PA, ST, QL, or comparator positioning at least 30 
+calendar days before the planned effective date, except where a shorter period is required by law or an urgent safety action. 
+
+3.2 Implementation grace period 
+A discrepancy observed within 10 calendar days after an approved formulary update may be classified as administrative lag 
+while the Payer completes system propagation, provided written confirmation and a corrective date are supplied. 
+
+3.3 Evidence hierarchy 
+For investigation, the parties may consider: (a) the executed Agreement and amendments; (b) Payer-issued formulary and policy 
+documents; (c) structured formulary datasets; (d) archived snapshots; and (e) written Payer confirmation. Conflicting evidence 
+must be reconciled before enforcement action. 
+
+3.4 Data quality safeguards 
+An automated alert shall be suppressed or routed to data stewardship when a source is stale, a plan mapping is incomplete, the 
+product mapping is ambiguous, or an effective date cannot be established. 
+
+4. Review, cure and remedies 
+4.1 Notice of potential deviation 
+Manufacturer may submit an evidence package identifying the affected plan, product, expected state, observed state, source, 
+effective date, and applicable clause. Submission does not by itself constitute a legal determination. 
+
+4.2 Payer review 
+Payer shall acknowledge the inquiry within five business days and provide a substantive response within ten business days, 
+unless the parties agree otherwise in writing. 
+
+4.3 Cure 
+If the parties confirm a deviation, Payer shall restore the compliant status within 15 calendar days or provide an agreed 
+remediation plan. The cure date shall be captured in the deviation case record. 
+
+4.4 Illustrative financial reconciliation 
+For PoC purposes only, a confirmed uncured Critical deviation lasting more than 30 calendar days may trigger a synthetic rebate 
+reconciliation flag. No automatic withholding, offset, or legal remedy shall be executed by the agent. 
+
+5. Governance and human oversight 
+5.1 Authorized decision makers 
+Contracting personnel determine contractual applicability and enforcement. Field roles may receive approved access guidance 
+and account-prioritization recommendations but shall not characterize an alert as a confirmed breach. 
+
+5.2 Permitted automated actions 
+The agent may extract clauses, create an expected-state record, compare expected and observed access, rank potential 
+deviations, assemble evidence, draft an inquiry, and recommend next actions. Human approval is required before external payer 
+communication or financial action. 
+
+5.3 Audit trail 
+SYNTHETIC DEMONSTRATION AGREEMENT - NOT LEGAL ADVICE - NOT FOR COMMERCIAL USE Page 3 
+
+
+The agent shall retain an audit trail for each deviation case, including the clause relied upon, the expected and observed states, 
+the evidence sources and retrieval dates, the classification and routing decision, any human approval, and the final disposition. 
+Audit records shall be retained for the duration of the Term and any agreed reconciliation period. 
+
+SYNTHETIC DEMONSTRATION AGREEMENT - NOT LEGAL ADVICE - NOT FOR COMMERCIAL USE Page 4 
+
+
+Exhibit A - Contract scope and product identifiers 
+
+Field Contract value 
+Payer ID PAY-001 
+Plan ID PLN-1001 
+Plan name NorthStar Commercial Plus 
+Line of business Commercial 
+Benefit type Pharmacy 
+Product ID PRD-001 
+Illustrative NDC11 00011111101 
+Comparator product ID PRD-002 
+Indication Condition X 
+
+Exhibit B - Expected state and tier crosswalk 
+
+Attribute Expected state Deviation trigger 
+Tier Tier 2 Preferred Tier 3, Tier 4, non-preferred or worse 
+Coverage Covered Not covered, excluded or non-formulary 
+PA Permitted per Exhibit C Criteria materially more restrictive than Exhibit C 
+ST Not permitted Any ST requirement 
+QL 1 package / 28 days Lower limit or shorter refill allowance 
+Parity No less favorable than PRD-002 Comparator has better tier, coverage or UM 
+
+SYNTHETIC DEMONSTRATION AGREEMENT - NOT LEGAL ADVICE - NOT FOR COMMERCIAL USE Page 5 
+
+
+Exhibit C - Approved PA criteria (synthetic) 
+
+PA may confirm: (1) diagnosis of Condition X; (2) prescribing by or consultation with an appropriate specialist; and (3) use 
+according to the approved label. This exhibit is fictional and is not clinical guidance. 
+
+Exhibit D - Deviation classification and routing 
+
+Observed condition Classification Primary routing 
+Expected Tier 2; actual Tier 3 Tier downgrade Contracting + Account Director 
+Brand Tier 3; comparator Tier 2 Potential parity deviation Contracting + Market Access Strategy 
+ST added where prohibited Restriction escalation Contracting + FRM + Patient Services 
+Covered becomes not covered Coverage loss Contracting + Account Director + FRM 
+Source stale or mapping ambiguous Data-quality exception Data Steward 
+
+Illustrative signatures 
+
+Demo Pharma, Inc. NorthStar Health Plan 
+Name: ____________________________ Name: ____________________________ 
+Title: _____________________________ Title: _____________________________ 
+Date: _____________________________ Date: _____________________________ 
+
+Legal and data disclaimer: This is a synthetic training and demonstration artifact. It is not an MMIT export, not a payer-issued agreement, not legal 
+advice, and not intended to represent actual coverage, clinical policy, or commercial terms. 
+
+SYNTHETIC DEMONSTRATION AGREEMENT - NOT LEGAL ADVICE - NOT FOR COMMERCIAL USE Page 6 
+
+
